@@ -1,0 +1,498 @@
+import Foundation
+
+#if canImport(Darwin)
+  import Darwin
+#else
+  import Glibc
+#endif
+
+/// A bounded, file-backed mailbox for moving values between processes that share a container.
+public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Sendable {
+  /// Resource limits and retention policy for a mailbox.
+  public struct Limits: Sendable, Equatable {
+    public var maxMessages: Int
+    public var maxPayloadBytes: Int
+    public var messageLifetime: TimeInterval
+    public var claimTimeout: TimeInterval
+    public var maxQuarantinedFiles: Int
+
+    public init(
+      maxMessages: Int = 100,
+      maxPayloadBytes: Int = 65_536,
+      messageLifetime: TimeInterval = 24 * 60 * 60,
+      claimTimeout: TimeInterval = 10 * 60,
+      maxQuarantinedFiles: Int = 20
+    ) {
+      self.maxMessages = maxMessages
+      self.maxPayloadBytes = maxPayloadBytes
+      self.messageLifetime = messageLifetime
+      self.claimTimeout = claimTimeout
+      self.maxQuarantinedFiles = maxQuarantinedFiles
+    }
+
+    fileprivate func validate() throws {
+      guard maxMessages > 0 else { throw MailboxError.invalidLimit("maxMessages") }
+      guard maxPayloadBytes > 0 else { throw MailboxError.invalidLimit("maxPayloadBytes") }
+      guard messageLifetime > 0 else { throw MailboxError.invalidLimit("messageLifetime") }
+      guard claimTimeout > 0 else { throw MailboxError.invalidLimit("claimTimeout") }
+      guard maxQuarantinedFiles >= 0 else { throw MailboxError.invalidLimit("maxQuarantinedFiles") }
+    }
+  }
+
+  /// What to do when enqueueing into a full mailbox.
+  public enum OverflowPolicy: Sendable {
+    case rejectNewest
+    case discardOldest
+  }
+
+  /// Non-sensitive events suitable for application logging.
+  public enum Diagnostic: Sendable, Equatable {
+    case expiredMessageRemoved
+    case abandonedClaimRecovered
+    case unsafeFileQuarantined
+    case malformedMessageQuarantined
+    case oldestMessageDiscarded
+  }
+
+  /// Failures produced by mailbox operations. No case contains message contents.
+  public enum MailboxError: Error, Sendable, Equatable {
+    case invalidNamespace
+    case invalidLimit(String)
+    case containerUnavailable
+    case mailboxFull
+    case payloadTooLarge(actualBytes: Int, maximumBytes: Int)
+    case unsafeFile
+    case claimNoLongerExists
+    case ioFailure
+    case encodingFailure
+    case decodingFailure
+  }
+
+  /// An atomically claimed message. A claim remains on disk until acknowledged or released.
+  public final class Claim: @unchecked Sendable {
+    public let id: UUID
+    public let message: Message
+    public let enqueuedAt: Date
+
+    private let mailbox: AppGroupMailbox
+    private let claimedURL: URL
+    private let originalName: String
+
+    fileprivate init(
+      id: UUID,
+      message: Message,
+      enqueuedAt: Date,
+      mailbox: AppGroupMailbox,
+      claimedURL: URL,
+      originalName: String
+    ) {
+      self.id = id
+      self.message = message
+      self.enqueuedAt = enqueuedAt
+      self.mailbox = mailbox
+      self.claimedURL = claimedURL
+      self.originalName = originalName
+    }
+
+    /// Permanently removes the claimed message.
+    public func acknowledge() throws {
+      try mailbox.finishClaim(at: claimedURL, originalName: originalName, acknowledge: true)
+    }
+
+    /// Returns the message to the pending queue at its original position.
+    public func release() throws {
+      try mailbox.finishClaim(at: claimedURL, originalName: originalName, acknowledge: false)
+    }
+  }
+
+  private struct Envelope: Codable, Sendable {
+    let id: UUID
+    let enqueuedAt: Date
+    let message: Message
+  }
+
+  private struct Entry {
+    let url: URL
+    let originalName: String
+  }
+
+  private let directory: URL
+  private let limits: Limits
+  private let overflowPolicy: OverflowPolicy
+  private let notificationName: String?
+  private let diagnostic: (@Sendable (Diagnostic) -> Void)?
+  private let fileManager: FileManager
+  private let encoder = JSONEncoder()
+  private let decoder = JSONDecoder()
+
+  /// Creates a mailbox inside `containerURL/AppGroupMailbox/<namespace>`.
+  public init(
+    containerURL: URL,
+    namespace: String,
+    limits: Limits = .init(),
+    overflowPolicy: OverflowPolicy = .rejectNewest,
+    notificationName: String? = nil,
+    diagnostic: (@Sendable (Diagnostic) -> Void)? = nil
+  ) throws {
+    guard Self.isValidNamespace(namespace) else { throw MailboxError.invalidNamespace }
+    try limits.validate()
+
+    let fileManager = FileManager.default
+    let root =
+      containerURL
+      .appendingPathComponent("AppGroupMailbox", isDirectory: true)
+      .appendingPathComponent(namespace, isDirectory: true)
+    do {
+      try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+      let values = try root.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+      guard values.isDirectory == true, values.isSymbolicLink != true else {
+        throw MailboxError.containerUnavailable
+      }
+    } catch let error as MailboxError {
+      throw error
+    } catch {
+      throw MailboxError.containerUnavailable
+    }
+
+    self.directory = root
+    self.limits = limits
+    self.overflowPolicy = overflowPolicy
+    self.notificationName = notificationName
+    self.diagnostic = diagnostic
+    self.fileManager = fileManager
+  }
+
+  /// Resolves an App Group container and creates a mailbox inside it.
+  public convenience init(
+    appGroupIdentifier: String,
+    namespace: String,
+    limits: Limits = .init(),
+    overflowPolicy: OverflowPolicy = .rejectNewest,
+    notificationName: String? = nil,
+    diagnostic: (@Sendable (Diagnostic) -> Void)? = nil
+  ) throws {
+    #if canImport(Darwin)
+      guard
+        let container = FileManager.default.containerURL(
+          forSecurityApplicationGroupIdentifier: appGroupIdentifier
+        )
+      else { throw MailboxError.containerUnavailable }
+      try self.init(
+        containerURL: container,
+        namespace: namespace,
+        limits: limits,
+        overflowPolicy: overflowPolicy,
+        notificationName: notificationName,
+        diagnostic: diagnostic
+      )
+    #else
+      throw MailboxError.containerUnavailable
+    #endif
+  }
+
+  /// Atomically adds a message and returns its stable identifier.
+  @discardableResult
+  public func enqueue(_ message: Message) throws -> UUID {
+    let id = UUID()
+
+    try withLock {
+      let envelope = Envelope(id: id, enqueuedAt: Date(), message: message)
+      let data: Data
+      do {
+        data = try encoder.encode(envelope)
+      } catch {
+        throw MailboxError.encodingFailure
+      }
+      guard data.count <= limits.maxPayloadBytes else {
+        throw MailboxError.payloadTooLarge(
+          actualBytes: data.count, maximumBytes: limits.maxPayloadBytes)
+      }
+
+      try maintain()
+      var pending = try pendingEntries()
+      if try activeMessageCount() >= limits.maxMessages {
+        switch overflowPolicy {
+        case .rejectNewest:
+          throw MailboxError.mailboxFull
+        case .discardOldest:
+          guard !pending.isEmpty else { throw MailboxError.mailboxFull }
+          try fileManager.removeItem(at: pending.removeFirst().url)
+          diagnostic?(.oldestMessageDiscarded)
+        }
+      }
+
+      let ordinal = try nextOrdinal(from: pending)
+      let name = String(format: "pending-%020llu-%@.json", ordinal, id.uuidString)
+      let destination = directory.appendingPathComponent(name, isDirectory: false)
+      do {
+        try data.write(to: destination, options: writeOptions)
+      } catch {
+        throw MailboxError.ioFailure
+      }
+    }
+
+    postNotification()
+    return id
+  }
+
+  /// Claims pending messages in FIFO order. Concurrent consumers cannot claim the same file.
+  public func claimPending(limit: Int? = nil) throws -> [Claim] {
+    if let limit, limit < 0 { throw MailboxError.invalidLimit("claim limit") }
+    return try withLock {
+      try maintain()
+      let entries = try pendingEntries()
+      let selected = limit.map { Array(entries.prefix($0)) } ?? entries
+      var claims: [Claim] = []
+      for entry in selected {
+        if let claim = try claim(entry) {
+          claims.append(claim)
+        }
+      }
+      return claims
+    }
+  }
+
+  /// Performs expiry, abandoned-claim recovery, and bounded quarantine cleanup.
+  public func performMaintenance() throws {
+    try withLock { try maintain() }
+  }
+
+  private func claim(_ entry: Entry) throws -> Claim? {
+    let claimName = "claimed-\(UUID().uuidString)-\(entry.originalName)"
+    let claimURL = directory.appendingPathComponent(claimName, isDirectory: false)
+    do {
+      try fileManager.moveItem(at: entry.url, to: claimURL)
+      try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: claimURL.path)
+    } catch let error as CocoaError where error.code == .fileNoSuchFile {
+      return nil
+    } catch {
+      if fileManager.fileExists(atPath: claimURL.path) {
+        try? fileManager.moveItem(at: claimURL, to: entry.url)
+      }
+      throw MailboxError.ioFailure
+    }
+
+    do {
+      let data = try safeData(at: claimURL)
+      let envelope = try decoder.decode(Envelope.self, from: data)
+      return Claim(
+        id: envelope.id,
+        message: envelope.message,
+        enqueuedAt: envelope.enqueuedAt,
+        mailbox: self,
+        claimedURL: claimURL,
+        originalName: entry.originalName
+      )
+    } catch let error as MailboxError where error == .unsafeFile {
+      try quarantine(claimURL)
+      diagnostic?(.unsafeFileQuarantined)
+      return nil
+    } catch {
+      try quarantine(claimURL)
+      diagnostic?(.malformedMessageQuarantined)
+      return nil
+    }
+  }
+
+  private func finishClaim(at url: URL, originalName: String, acknowledge: Bool) throws {
+    try withLock {
+      guard fileManager.fileExists(atPath: url.path) else { throw MailboxError.claimNoLongerExists }
+      do {
+        if acknowledge {
+          try fileManager.removeItem(at: url)
+        } else {
+          let destination = directory.appendingPathComponent(originalName, isDirectory: false)
+          try fileManager.moveItem(at: url, to: destination)
+        }
+      } catch {
+        throw MailboxError.ioFailure
+      }
+    }
+  }
+
+  private func maintain() throws {
+    let now = Date()
+    let urls = try contents()
+    for url in urls {
+      let name = url.lastPathComponent
+      guard name.hasPrefix("pending-") || name.hasPrefix("claimed-") else { continue }
+      let values = try? url.resourceValues(forKeys: [
+        .contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey,
+      ])
+      guard values?.isRegularFile == true, values?.isSymbolicLink != true else {
+        try quarantine(url)
+        diagnostic?(.unsafeFileQuarantined)
+        continue
+      }
+      let age = now.timeIntervalSince(values?.contentModificationDate ?? now)
+      if name.hasPrefix("pending-"), age > limits.messageLifetime {
+        try? fileManager.removeItem(at: url)
+        diagnostic?(.expiredMessageRemoved)
+      } else if name.hasPrefix("claimed-"), age > limits.claimTimeout,
+        let original = Self.originalName(fromClaimName: name)
+      {
+        let destination = directory.appendingPathComponent(original, isDirectory: false)
+        if !fileManager.fileExists(atPath: destination.path) {
+          try? fileManager.moveItem(at: url, to: destination)
+          diagnostic?(.abandonedClaimRecovered)
+        } else {
+          try quarantine(url)
+          diagnostic?(.unsafeFileQuarantined)
+        }
+      }
+    }
+    try trimQuarantine()
+  }
+
+  private func pendingEntries() throws -> [Entry] {
+    try contents()
+      .filter { $0.lastPathComponent.hasPrefix("pending-") && $0.pathExtension == "json" }
+      .compactMap { url in
+        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values?.isRegularFile == true, values?.isSymbolicLink != true else { return nil }
+        return Entry(url: url, originalName: url.lastPathComponent)
+      }
+      .sorted { $0.originalName < $1.originalName }
+  }
+
+  private func activeMessageCount() throws -> Int {
+    try contents().count { url in
+      let name = url.lastPathComponent
+      let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      return (name.hasPrefix("pending-") || name.hasPrefix("claimed-"))
+        && values?.isRegularFile == true
+        && values?.isSymbolicLink != true
+    }
+  }
+
+  private func contents() throws -> [URL] {
+    do {
+      return try fileManager.contentsOfDirectory(
+        at: directory,
+        includingPropertiesForKeys: [
+          .contentModificationDateKey, .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
+        ],
+        options: [.skipsHiddenFiles]
+      )
+    } catch {
+      throw MailboxError.ioFailure
+    }
+  }
+
+  private func safeData(at url: URL) throws -> Data {
+    let values: URLResourceValues
+    do {
+      values = try url.resourceValues(forKeys: [
+        .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
+      ])
+    } catch {
+      throw MailboxError.unsafeFile
+    }
+    guard values.isRegularFile == true,
+      values.isSymbolicLink != true,
+      let size = values.fileSize,
+      size >= 0,
+      size <= limits.maxPayloadBytes
+    else { throw MailboxError.unsafeFile }
+    do {
+      return try Data(contentsOf: url, options: [.mappedIfSafe])
+    } catch {
+      throw MailboxError.ioFailure
+    }
+  }
+
+  private func quarantine(_ url: URL) throws {
+    guard limits.maxQuarantinedFiles > 0 else {
+      try? fileManager.removeItem(at: url)
+      return
+    }
+    let destination = directory.appendingPathComponent(
+      "quarantine-\(UInt64(Date().timeIntervalSince1970 * 1_000))-\(UUID().uuidString).bin",
+      isDirectory: false
+    )
+    do {
+      try fileManager.moveItem(at: url, to: destination)
+    } catch let error as CocoaError where error.code == .fileNoSuchFile {
+      return
+    } catch {
+      throw MailboxError.ioFailure
+    }
+    try trimQuarantine()
+  }
+
+  private func trimQuarantine() throws {
+    let quarantined = try contents()
+      .filter { $0.lastPathComponent.hasPrefix("quarantine-") }
+      .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    for url in quarantined.dropLast(limits.maxQuarantinedFiles) {
+      try? fileManager.removeItem(at: url)
+    }
+  }
+
+  private func nextOrdinal(from entries: [Entry]) throws -> UInt64 {
+    let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
+    let highest = entries.compactMap { Self.ordinal(from: $0.originalName) }.max() ?? 0
+    let (incremented, overflow) = highest.addingReportingOverflow(1)
+    guard !overflow else { throw MailboxError.ioFailure }
+    return max(now, incremented)
+  }
+
+  private func withLock<T>(_ body: () throws -> T) throws -> T {
+    let lockURL = directory.appendingPathComponent(".mailbox.lock", isDirectory: false)
+    let descriptor = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+    guard descriptor >= 0 else { throw MailboxError.ioFailure }
+    defer { close(descriptor) }
+    guard flock(descriptor, LOCK_EX) == 0 else { throw MailboxError.ioFailure }
+    defer { flock(descriptor, LOCK_UN) }
+    return try body()
+  }
+
+  private func postNotification() {
+    #if canImport(Darwin)
+      guard let notificationName else { return }
+      CFNotificationCenterPostNotification(
+        CFNotificationCenterGetDarwinNotifyCenter(),
+        CFNotificationName(notificationName as CFString),
+        nil,
+        nil,
+        true
+      )
+    #endif
+  }
+
+  private static func isValidNamespace(_ namespace: String) -> Bool {
+    guard (1...64).contains(namespace.count) else { return false }
+    return namespace.utf8.allSatisfy { byte in
+      (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+        || byte == 45 || byte == 95 || byte == 46
+    } && namespace != "." && namespace != ".."
+  }
+
+  private static func ordinal(from name: String) -> UInt64? {
+    guard name.hasPrefix("pending-") else { return nil }
+    return UInt64(name.dropFirst("pending-".count).prefix(while: \Character.isNumber))
+  }
+
+  private static func originalName(fromClaimName name: String) -> String? {
+    guard name.hasPrefix("claimed-") else { return nil }
+    let remainder = name.dropFirst("claimed-".count)
+    guard remainder.count > 37,
+      UUID(uuidString: String(remainder.prefix(36))) != nil,
+      remainder.dropFirst(36).first == "-"
+    else { return nil }
+    let original = String(remainder.dropFirst(37))
+    guard original.hasPrefix("pending-"), original.hasSuffix(".json"), !original.contains("/")
+    else {
+      return nil
+    }
+    return original
+  }
+
+  private var writeOptions: Data.WritingOptions {
+    #if os(iOS) || os(tvOS) || os(watchOS) || os(visionOS)
+      [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+    #else
+      [.atomic]
+    #endif
+  }
+}

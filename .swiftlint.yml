@@ -1,0 +1,24 @@
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+
+disabled_rules:
+  # `swift format` owns these rules and intentionally formats multiline conditions
+  # and collection literals differently from SwiftLint's defaults.
+  - opening_brace
+  - trailing_comma
+
+file_length:
+  warning: 500
+  error: 700
+
+type_body_length:
+  warning: 450
+  error: 550
+
+function_body_length:
+  warning: 80
+  error: 120

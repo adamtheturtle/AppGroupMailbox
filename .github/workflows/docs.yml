@@ -1,0 +1,17 @@
+name: Documentation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  docc:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Build DocC documentation
+        run: swift package generate-documentation --target AppGroupMailbox --warnings-as-errors

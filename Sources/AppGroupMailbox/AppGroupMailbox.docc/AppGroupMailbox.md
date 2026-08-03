@@ -38,6 +38,7 @@ and namespaces that could alter a path. Diagnostics never contain message conten
 ### Sending and receiving
 
 - ``AppGroupMailbox/enqueue(_:)``
+- ``AppGroupMailbox/enqueue(_:id:)``
 - ``AppGroupMailbox/claimPending(limit:)``
 - ``AppGroupMailbox/Claim``
 

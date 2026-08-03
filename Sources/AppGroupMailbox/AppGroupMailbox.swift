@@ -193,7 +193,16 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   /// Atomically adds a message and returns its stable identifier.
   @discardableResult
   public func enqueue(_ message: Message) throws -> UUID {
-    let id = UUID()
+    try enqueue(message, id: UUID())
+  }
+
+  /// Atomically adds a message with a caller-supplied stable identifier.
+  ///
+  /// If an active pending or claimed message already has `id`, this operation succeeds without
+  /// writing a duplicate. This makes importing an external durable queue safe to retry after a
+  /// process terminates between enqueueing and removing the source record.
+  @discardableResult
+  public func enqueue(_ message: Message, id: UUID) throws -> UUID {
 
     try withLock {
       let envelope = Envelope(id: id, enqueuedAt: Date(), message: message)
@@ -209,6 +218,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
 
       try maintain()
+      if try containsMessage(id: id) { return }
       var pending = try pendingEntries()
       if try activeMessageCount() >= limits.maxMessages {
         switch overflowPolicy {
@@ -363,6 +373,18 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         && values?.isRegularFile == true
         && values?.isSymbolicLink != true
     }
+  }
+
+  private func containsMessage(id: UUID) throws -> Bool {
+    for url in try contents() {
+      let name = url.lastPathComponent
+      guard name.hasPrefix("pending-") || name.hasPrefix("claimed-") else { continue }
+      guard let data = try? safeData(at: url),
+        let envelope = try? decoder.decode(Envelope.self, from: data)
+      else { continue }
+      if envelope.id == id { return true }
+    }
+    return false
   }
 
   private func contents() throws -> [URL] {

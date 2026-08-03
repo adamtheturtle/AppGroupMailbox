@@ -42,6 +42,13 @@ payload-free Darwin notification:
 try mailbox.enqueue(.selectItem(id: itemID))
 ```
 
+When importing another durable queue, supply its stable record ID. Retrying the import succeeds
+without writing a duplicate while that ID is pending or claimed:
+
+```swift
+try mailbox.enqueue(action, id: legacyRecordID)
+```
+
 The consumer claims in FIFO order, handles each value, and acknowledges success:
 
 ```swift

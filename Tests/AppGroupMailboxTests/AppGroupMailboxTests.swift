@@ -34,6 +34,21 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending().map(\.message.value) == ["first", "second"])
   }
 
+  @Test("A caller-supplied ID makes a retried enqueue idempotent")
+  func idempotentEnqueue() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    let id = UUID()
+
+    try mailbox.enqueue(Message(value: "original"), id: id)
+    try mailbox.enqueue(Message(value: "retry"), id: id)
+
+    let claims = try mailbox.claimPending()
+    #expect(claims.count == 1)
+    #expect(claims.first?.id == id)
+    #expect(claims.first?.message.value == "original")
+  }
+
   @Test("A full mailbox can reject the newest message")
   func rejectOverflow() throws {
     let fixture = try Fixture()

@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-03
+
+### Added
+
+- Idempotent `enqueue(_:id:)` for safely importing records from another durable queue.
+
 ## [0.1.0] - 2026-08-03
 
 ### Added
@@ -18,5 +24,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Optional Darwin wake-up notification after enqueue.
 - DocC documentation and tests for ordering, bounds, recovery, and concurrency.
 
-[Unreleased]: https://github.com/adamtheturtle/AppGroupMailbox/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/adamtheturtle/AppGroupMailbox/compare/0.1.1...HEAD
+[0.1.1]: https://github.com/adamtheturtle/AppGroupMailbox/compare/0.1.0...0.1.1
 [0.1.0]: https://github.com/adamtheturtle/AppGroupMailbox/releases/tag/0.1.0

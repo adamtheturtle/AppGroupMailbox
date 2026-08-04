@@ -34,6 +34,42 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending().map(\.message.value) == ["first", "second"])
   }
 
+  @Test("New ordinals sort after active claimed messages")
+  func claimedMessagesInfluenceOrdinalAllocation() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    let olderID = try mailbox.enqueue(Message(value: "older"))
+    _ = try #require(try mailbox.claimPending(limit: 1).first)
+    let claimed = try #require(
+      try FileManager.default.contentsOfDirectory(
+        at: fixture.mailboxDirectory,
+        includingPropertiesForKeys: nil
+      ).first { $0.lastPathComponent.hasPrefix("claimed-") }
+    )
+
+    // Simulate a claim whose active ordinal is ahead of a wall clock that moved backwards.
+    let futureOrdinal = "09000000000000000000"
+    let originalName = "pending-\(futureOrdinal)-\(olderID.uuidString).json"
+    let renamedClaim = fixture.mailboxDirectory.appendingPathComponent(
+      "claimed-\(UUID().uuidString)-\(originalName)"
+    )
+    try FileManager.default.moveItem(at: claimed, to: renamedClaim)
+
+    // A malformed claimed filename with the maximum ordinal must not force overflow.
+    let malformed = fixture.mailboxDirectory.appendingPathComponent(
+      "claimed-not-a-uuid-pending-18446744073709551615-\(UUID().uuidString).json"
+    )
+    try Data().write(to: malformed)
+
+    try mailbox.enqueue(Message(value: "newer"))
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: -700)],
+      ofItemAtPath: renamedClaim.path
+    )
+
+    #expect(try mailbox.claimPending().map(\.message.value) == ["older", "newer"])
+  }
+
   @Test("A caller-supplied ID makes a retried enqueue idempotent")
   func idempotentEnqueue() throws {
     let fixture = try Fixture()

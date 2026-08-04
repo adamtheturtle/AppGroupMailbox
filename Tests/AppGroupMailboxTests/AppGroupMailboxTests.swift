@@ -138,6 +138,24 @@ struct AppGroupMailboxTests {
     #expect(names.filter { $0.hasPrefix("quarantine-") }.count == 2)
   }
 
+  @Test("The mailbox lock does not follow symbolic links")
+  func lockSymlinkIsRejected() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    let outside = fixture.root.appendingPathComponent("outside-lock")
+    let original = Data("outside".utf8)
+    try original.write(to: outside)
+    try FileManager.default.createSymbolicLink(
+      at: fixture.mailboxDirectory.appendingPathComponent(".mailbox.lock"),
+      withDestinationURL: outside
+    )
+
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.ioFailure) {
+      try mailbox.enqueue(Message(value: "blocked"))
+    }
+    #expect(try Data(contentsOf: outside) == original)
+  }
+
   @Test("Expired messages are removed")
   func expiration() throws {
     let fixture = try Fixture()

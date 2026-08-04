@@ -119,7 +119,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   private let directory: URL
   let limits: Limits
   private let overflowPolicy: OverflowPolicy
-  private let notificationName: String?
+  let notificationName: String?
   private let diagnostic: (@Sendable (Diagnostic) -> Void)?
   private let fileManager: FileManager
   private let encoder = JSONEncoder()
@@ -217,7 +217,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           actualBytes: data.count, maximumBytes: limits.maxPayloadBytes)
       }
 
-      try maintain()
+      _ = try maintain()
       if try containsMessage(id: id) { return }
       var pending = try pendingEntries()
       if try activeMessageCount() >= limits.maxMessages {
@@ -248,8 +248,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   /// Claims pending messages in FIFO order. Concurrent consumers cannot claim the same file.
   public func claimPending(limit: Int? = nil) throws -> [Claim] {
     if let limit, limit < 0 { throw MailboxError.invalidLimit("claim limit") }
-    return try withLock {
-      try maintain()
+    let (claims, recoveredMessages) = try withLock {
+      let recoveredMessages = try maintain()
       let entries = try pendingEntries()
       let selected = limit.map { Array(entries.prefix($0)) } ?? entries
       var claims: [Claim] = []
@@ -258,13 +258,16 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           claims.append(claim)
         }
       }
-      return claims
+      return (claims, recoveredMessages)
     }
+    if recoveredMessages { postNotification() }
+    return claims
   }
 
   /// Performs expiry, abandoned-claim recovery, and bounded quarantine cleanup.
   public func performMaintenance() throws {
-    try withLock { try maintain() }
+    let recoveredMessages = try withLock { try maintain() }
+    if recoveredMessages { postNotification() }
   }
 
   private func claim(_ entry: Entry) throws -> Claim? {
@@ -318,10 +321,12 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         throw MailboxError.ioFailure
       }
     }
+    if !acknowledge { postNotification() }
   }
 
-  private func maintain() throws {
+  private func maintain() throws -> Bool {
     let now = Date()
+    var recoveredMessages = false
     let urls = try contents()
     for url in urls {
       let name = url.lastPathComponent
@@ -343,8 +348,10 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       {
         let destination = directory.appendingPathComponent(original, isDirectory: false)
         if !fileManager.fileExists(atPath: destination.path) {
-          try? fileManager.moveItem(at: url, to: destination)
-          diagnostic?(.abandonedClaimRecovered)
+          if (try? fileManager.moveItem(at: url, to: destination)) != nil {
+            recoveredMessages = true
+            diagnostic?(.abandonedClaimRecovered)
+          }
         } else {
           try quarantine(url)
           diagnostic?(.unsafeFileQuarantined)
@@ -352,6 +359,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
     }
     try trimQuarantine()
+    return recoveredMessages
   }
 
   private func pendingEntries() throws -> [Entry] {
@@ -427,19 +435,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     for url in quarantined.dropLast(limits.maxQuarantinedFiles) {
       try? fileManager.removeItem(at: url)
     }
-  }
-
-  private func postNotification() {
-    #if canImport(Darwin)
-      guard let notificationName else { return }
-      CFNotificationCenterPostNotification(
-        CFNotificationCenterGetDarwinNotifyCenter(),
-        CFNotificationName(notificationName as CFString),
-        nil,
-        nil,
-        true
-      )
-    #endif
   }
 
   private static func isValidNamespace(_ namespace: String) -> Bool {

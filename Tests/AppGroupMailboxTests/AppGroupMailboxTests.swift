@@ -315,7 +315,7 @@ private var mailboxTestWorkerURL: URL? {
   return nil
 }
 
-private final class Fixture {
+final class Fixture {
   let root: URL
   let mailboxDirectory: URL
 
@@ -335,13 +335,15 @@ private final class Fixture {
 
   func mailbox(
     limits: AppGroupMailbox<AppGroupMailboxTests.Message>.Limits = .init(),
-    overflowPolicy: AppGroupMailbox<AppGroupMailboxTests.Message>.OverflowPolicy = .rejectNewest
+    overflowPolicy: AppGroupMailbox<AppGroupMailboxTests.Message>.OverflowPolicy = .rejectNewest,
+    notificationName: String? = nil
   ) throws -> AppGroupMailbox<AppGroupMailboxTests.Message> {
     try AppGroupMailbox(
       containerURL: root,
       namespace: "tests",
       limits: limits,
-      overflowPolicy: overflowPolicy
+      overflowPolicy: overflowPolicy,
+      notificationName: notificationName
     )
   }
 }

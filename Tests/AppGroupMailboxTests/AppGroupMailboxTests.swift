@@ -83,6 +83,43 @@ struct AppGroupMailboxTests {
     #expect(claims.count == 1)
     #expect(claims.first?.id == id)
     #expect(claims.first?.message.value == "original")
+
+    try mailbox.enqueue(Message(value: "claimed retry"), id: id)
+    #expect(try mailbox.claimPending().isEmpty)
+    try claims.first?.acknowledge()
+  }
+
+  @Test("Imported messages retain chronology and deterministic tie ordering")
+  func importedChronology() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(maxMessages: 10))
+    let now = Date()
+    let duplicateID = UUID()
+
+    try mailbox.enqueue(Message(value: "native"))
+    try mailbox.enqueue(
+      Message(value: "oldest"), id: UUID(), enqueuedAt: now.addingTimeInterval(-2))
+    try mailbox.enqueue(
+      Message(value: "tie first"), id: UUID(), enqueuedAt: now.addingTimeInterval(-1))
+    try mailbox.enqueue(
+      Message(value: "tie second"), id: UUID(), enqueuedAt: now.addingTimeInterval(-1))
+    try mailbox.enqueue(
+      Message(value: "newest"), id: duplicateID, enqueuedAt: now.addingTimeInterval(2))
+    try mailbox.enqueue(
+      Message(value: "duplicate"), id: duplicateID, enqueuedAt: now.addingTimeInterval(-3))
+    try Data("not json".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000000-malformed.json"
+      )
+    )
+
+    let oldest = try #require(try mailbox.claimPending(limit: 1).first)
+    #expect(oldest.message.value == "oldest")
+    try oldest.acknowledge()
+    #expect(
+      try mailbox.claimPending().map(\.message.value)
+        == ["tie first", "tie second", "native", "newest"]
+    )
   }
 
   @Test("A full mailbox can reject the newest message")

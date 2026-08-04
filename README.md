@@ -49,6 +49,13 @@ without writing a duplicate while that ID is pending or claimed:
 try mailbox.enqueue(action, id: legacyRecordID)
 ```
 
+Pass the legacy enqueue date as well to preserve its chronological position relative to messages
+already in the mailbox. Records with equal dates retain their mailbox insertion order:
+
+```swift
+try mailbox.enqueue(action, id: legacyRecordID, enqueuedAt: legacyEnqueuedAt)
+```
+
 The consumer claims in FIFO order, handles each value, and acknowledges success:
 
 ```swift

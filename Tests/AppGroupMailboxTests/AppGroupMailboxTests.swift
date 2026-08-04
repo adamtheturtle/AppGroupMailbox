@@ -241,10 +241,7 @@ struct AppGroupMailboxTests {
         at: fixture.mailboxDirectory,
         includingPropertiesForKeys: nil
       ).first { $0.lastPathComponent.hasPrefix("pending-") })
-    try FileManager.default.setAttributes(
-      [.modificationDate: Date(timeIntervalSinceNow: -2)],
-      ofItemAtPath: pending.path
-    )
+    try setEnqueuedAt(Date(timeIntervalSinceNow: -2), in: pending)
 
     try mailbox.performMaintenance()
     #expect(try mailbox.claimPending().isEmpty)
@@ -270,6 +267,59 @@ struct AppGroupMailboxTests {
     #expect(throws: AppGroupMailbox<Message>.MailboxError.claimNoLongerExists) {
       try claim.acknowledge()
     }
+  }
+
+  @Test("Releasing a claim does not extend its original lifetime")
+  func releasedClaimKeepsOriginalLifetime() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(messageLifetime: 1))
+    try mailbox.enqueue(Message(value: "expire me"))
+    let claim = try #require(try mailbox.claimPending(limit: 1).first)
+    let claimedURL = try #require(try fixture.claimedURL())
+    try setEnqueuedAt(Date(timeIntervalSinceNow: -2), in: claimedURL)
+
+    try claim.release()
+    try mailbox.performMaintenance()
+
+    #expect(try mailbox.claimPending().isEmpty)
+  }
+
+  @Test("An active claim remains valid after the message lifetime")
+  func activeClaimCanOutliveMessageLifetime() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(messageLifetime: 1))
+    try mailbox.enqueue(Message(value: "still processing"))
+    let claim = try #require(try mailbox.claimPending(limit: 1).first)
+    let claimedURL = try #require(try fixture.claimedURL())
+    try setEnqueuedAt(Date(timeIntervalSinceNow: -2), in: claimedURL)
+
+    try mailbox.performMaintenance()
+
+    try claim.acknowledge()
+    #expect(try mailbox.claimPending().isEmpty)
+  }
+
+  @Test("Expired abandoned claims are discarded instead of recovered")
+  func expiredAbandonedClaimIsDiscarded() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(messageLifetime: 1, claimTimeout: 1),
+      diagnostic: diagnostics.record
+    )
+    try mailbox.enqueue(Message(value: "expire me"))
+    _ = try #require(try mailbox.claimPending(limit: 1).first)
+    let claimedURL = try #require(try fixture.claimedURL())
+    try setEnqueuedAt(Date(timeIntervalSinceNow: -2), in: claimedURL)
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: -2)],
+      ofItemAtPath: claimedURL.path
+    )
+
+    try mailbox.performMaintenance()
+
+    #expect(try mailbox.claimPending().isEmpty)
+    #expect(diagnostics.values == [.expiredMessageRemoved])
   }
 
   @Test("Concurrent consumers claim each message once")
@@ -371,6 +421,30 @@ private var mailboxTestWorkerURL: URL? {
   return nil
 }
 
+private func setEnqueuedAt(_ date: Date, in url: URL) throws {
+  let data = try Data(contentsOf: url)
+  var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+  object["enqueuedAt"] = date.timeIntervalSinceReferenceDate
+  try JSONSerialization.data(withJSONObject: object).write(to: url)
+}
+
+private final class DiagnosticRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedValues: [AppGroupMailbox<AppGroupMailboxTests.Message>.Diagnostic] = []
+
+  func record(_ diagnostic: AppGroupMailbox<AppGroupMailboxTests.Message>.Diagnostic) {
+    lock.lock()
+    storedValues.append(diagnostic)
+    lock.unlock()
+  }
+
+  var values: [AppGroupMailbox<AppGroupMailboxTests.Message>.Diagnostic] {
+    lock.lock()
+    defer { lock.unlock() }
+    return storedValues
+  }
+}
+
 final class Fixture {
   let root: URL
   let mailboxDirectory: URL
@@ -392,14 +466,24 @@ final class Fixture {
   func mailbox(
     limits: AppGroupMailbox<AppGroupMailboxTests.Message>.Limits = .init(),
     overflowPolicy: AppGroupMailbox<AppGroupMailboxTests.Message>.OverflowPolicy = .rejectNewest,
-    notificationName: String? = nil
+    notificationName: String? = nil,
+    diagnostic:
+      (@Sendable (AppGroupMailbox<AppGroupMailboxTests.Message>.Diagnostic) -> Void)? = nil
   ) throws -> AppGroupMailbox<AppGroupMailboxTests.Message> {
     try AppGroupMailbox(
       containerURL: root,
       namespace: "tests",
       limits: limits,
       overflowPolicy: overflowPolicy,
-      notificationName: notificationName
+      notificationName: notificationName,
+      diagnostic: diagnostic
     )
+  }
+
+  func claimedURL() throws -> URL? {
+    try FileManager.default.contentsOfDirectory(
+      at: mailboxDirectory,
+      includingPropertiesForKeys: nil
+    ).first { $0.lastPathComponent.hasPrefix("claimed-") }
   }
 }

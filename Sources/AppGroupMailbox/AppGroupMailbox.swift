@@ -213,7 +213,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   /// Pending or claimed messages with the same `id` are not duplicated.
   @discardableResult
   public func enqueue(_ message: Message, id: UUID, enqueuedAt: Date) throws -> UUID {
-
     try withLock {
       let envelope = Envelope(id: id, enqueuedAt: enqueuedAt, message: message)
       let data: Data
@@ -360,13 +359,21 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       } else {
         claimedOriginalName = nil
       }
-      let age = now.timeIntervalSince(values?.contentModificationDate ?? now)
-      if name.hasPrefix("pending-"), age > limits.messageLifetime {
+      let modificationDate = values?.contentModificationDate ?? now
+      let claimAge = now.timeIntervalSince(modificationDate)
+      let enqueuedAt = try? decoder.decode(Envelope.self, from: safeData(at: url)).enqueuedAt
+      let messageAge = now.timeIntervalSince(enqueuedAt ?? modificationDate)
+      if name.hasPrefix("pending-"), messageAge > limits.messageLifetime {
         try? fileManager.removeItem(at: url)
         diagnostic?(.expiredMessageRemoved)
-      } else if name.hasPrefix("claimed-"), age > limits.claimTimeout,
+      } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
       {
+        if messageAge > limits.messageLifetime {
+          try? fileManager.removeItem(at: url)
+          diagnostic?(.expiredMessageRemoved)
+          continue
+        }
         let destination = directory.appendingPathComponent(original, isDirectory: false)
         if !fileManager.fileExists(atPath: destination.path) {
           if (try? fileManager.moveItem(at: url, to: destination)) != nil {

@@ -105,7 +105,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     }
   }
 
-  private struct Envelope: Codable, Sendable {
+  struct Envelope: Codable, Sendable {
     let id: UUID
     let enqueuedAt: Date
     let message: Message
@@ -114,6 +114,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   struct Entry {
     let url: URL
     let originalName: String
+    let enqueuedAt: Date?
   }
 
   let directory: URL
@@ -123,7 +124,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   private let diagnostic: (@Sendable (Diagnostic) -> Void)?
   private let fileManager: FileManager
   private let encoder = JSONEncoder()
-  private let decoder = JSONDecoder()
+  let decoder = JSONDecoder()
 
   /// Creates a mailbox inside `containerURL/AppGroupMailbox/<namespace>`.
   public init(
@@ -193,7 +194,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   /// Atomically adds a message and returns its stable identifier.
   @discardableResult
   public func enqueue(_ message: Message) throws -> UUID {
-    try enqueue(message, id: UUID())
+    try enqueue(message, id: UUID(), enqueuedAt: Date())
   }
 
   /// Atomically adds a message with a caller-supplied stable identifier.
@@ -203,9 +204,18 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   /// process terminates between enqueueing and removing the source record.
   @discardableResult
   public func enqueue(_ message: Message, id: UUID) throws -> UUID {
+    try enqueue(message, id: id, enqueuedAt: Date())
+  }
+
+  /// Atomically imports a message at its original chronological position.
+  ///
+  /// Messages with the same enqueue date retain their mailbox insertion order.
+  /// Pending or claimed messages with the same `id` are not duplicated.
+  @discardableResult
+  public func enqueue(_ message: Message, id: UUID, enqueuedAt: Date) throws -> UUID {
 
     try withLock {
-      let envelope = Envelope(id: id, enqueuedAt: Date(), message: message)
+      let envelope = Envelope(id: id, enqueuedAt: enqueuedAt, message: message)
       let data: Data
       do {
         data = try encoder.encode(envelope)
@@ -371,17 +381,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     }
     try trimQuarantine()
     return recoveredMessages
-  }
-
-  private func pendingEntries() throws -> [Entry] {
-    try contents()
-      .filter { $0.lastPathComponent.hasPrefix("pending-") && $0.pathExtension == "json" }
-      .compactMap { url in
-        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        guard values?.isRegularFile == true, values?.isSymbolicLink != true else { return nil }
-        return Entry(url: url, originalName: url.lastPathComponent)
-      }
-      .sorted { $0.originalName < $1.originalName }
   }
 
   private func activeMessageCount() throws -> Int {

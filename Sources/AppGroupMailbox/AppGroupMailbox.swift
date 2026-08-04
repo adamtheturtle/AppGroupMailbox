@@ -111,12 +111,12 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     let message: Message
   }
 
-  private struct Entry {
+  struct Entry {
     let url: URL
     let originalName: String
   }
 
-  private let directory: URL
+  let directory: URL
   let limits: Limits
   private let overflowPolicy: OverflowPolicy
   let notificationName: String?
@@ -339,12 +339,23 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         diagnostic?(.unsafeFileQuarantined)
         continue
       }
+      let claimedOriginalName: String?
+      if name.hasPrefix("claimed-") {
+        guard let originalName = Self.originalName(fromClaimName: name) else {
+          try quarantine(url)
+          diagnostic?(.unsafeFileQuarantined)
+          continue
+        }
+        claimedOriginalName = originalName
+      } else {
+        claimedOriginalName = nil
+      }
       let age = now.timeIntervalSince(values?.contentModificationDate ?? now)
       if name.hasPrefix("pending-"), age > limits.messageLifetime {
         try? fileManager.removeItem(at: url)
         diagnostic?(.expiredMessageRemoved)
       } else if name.hasPrefix("claimed-"), age > limits.claimTimeout,
-        let original = Self.originalName(fromClaimName: name)
+        let original = claimedOriginalName
       {
         let destination = directory.appendingPathComponent(original, isDirectory: false)
         if !fileManager.fileExists(atPath: destination.path) {
@@ -395,7 +406,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     return false
   }
 
-  private func contents() throws -> [URL] {
+  func contents() throws -> [URL] {
     do {
       return try fileManager.contentsOfDirectory(
         at: directory,
@@ -445,12 +456,12 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     } && namespace != "." && namespace != ".."
   }
 
-  private static func ordinal(from name: String) -> UInt64? {
+  static func ordinal(from name: String) -> UInt64? {
     guard name.hasPrefix("pending-") else { return nil }
     return UInt64(name.dropFirst("pending-".count).prefix(while: \Character.isNumber))
   }
 
-  private static func originalName(fromClaimName name: String) -> String? {
+  static func originalName(fromClaimName name: String) -> String? {
     guard name.hasPrefix("claimed-") else { return nil }
     let remainder = name.dropFirst("claimed-".count)
     guard remainder.count > 37,
@@ -471,51 +482,5 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     #else
       [.atomic]
     #endif
-  }
-}
-
-extension AppGroupMailbox {
-  private func nextOrdinal(from entries: [Entry]) throws -> UInt64 {
-    let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
-    let pendingOrdinals = entries.compactMap { Self.ordinal(from: $0.originalName) }
-    let claimedOrdinals = try contents().compactMap { url -> UInt64? in
-      let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-      guard values?.isRegularFile == true, values?.isSymbolicLink != true,
-        let originalName = Self.originalName(fromClaimName: url.lastPathComponent)
-      else { return nil }
-
-      return Self.ordinal(from: originalName)
-    }
-    let highest = (pendingOrdinals + claimedOrdinals).max() ?? 0
-    let (incremented, overflow) = highest.addingReportingOverflow(1)
-    guard !overflow else { throw MailboxError.ioFailure }
-    return max(now, incremented)
-  }
-
-  private func withLock<T>(_ body: () throws -> T) throws -> T {
-    let lockURL = directory.appendingPathComponent(".mailbox.lock", isDirectory: false)
-    let descriptor = open(
-      lockURL.path,
-      O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC,
-      S_IRUSR | S_IWUSR
-    )
-    guard descriptor >= 0 else { throw MailboxError.ioFailure }
-    defer { close(descriptor) }
-
-    var descriptorStatus = stat()
-    var pathStatus = stat()
-    guard fstat(descriptor, &descriptorStatus) == 0,
-      lstat(lockURL.path, &pathStatus) == 0,
-      descriptorStatus.st_uid == geteuid(),
-      descriptorStatus.st_nlink == 1,
-      descriptorStatus.st_dev == pathStatus.st_dev,
-      descriptorStatus.st_ino == pathStatus.st_ino,
-      descriptorStatus.st_mode & S_IFMT == S_IFREG,
-      pathStatus.st_mode & S_IFMT == S_IFREG
-    else { throw MailboxError.ioFailure }
-
-    guard flock(descriptor, LOCK_EX) == 0 else { throw MailboxError.ioFailure }
-    defer { flock(descriptor, LOCK_UN) }
-    return try body()
   }
 }

@@ -175,6 +175,25 @@ struct AppGroupMailboxTests {
     #expect(data == original)
   }
 
+  @Test("Malformed claimed filenames are quarantined with bounded retention")
+  func malformedClaimNamesAreQuarantined() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(maxQuarantinedFiles: 2))
+    for index in 0..<3 {
+      try Data("{}".utf8).write(
+        to: fixture.mailboxDirectory.appendingPathComponent(
+          "claimed-\(UUID().uuidString)-malformed-\(index).json"
+        )
+      )
+    }
+
+    try mailbox.performMaintenance()
+
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(!names.contains { $0.hasPrefix("claimed-") })
+    #expect(names.filter { $0.hasPrefix("quarantine-") }.count == 2)
+  }
+
   @Test("Expired messages are removed")
   func expiration() throws {
     let fixture = try Fixture()

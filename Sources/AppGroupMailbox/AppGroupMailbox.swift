@@ -117,7 +117,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 
   private let directory: URL
-  private let limits: Limits
+  let limits: Limits
   private let overflowPolicy: OverflowPolicy
   private let notificationName: String?
   private let diagnostic: (@Sendable (Diagnostic) -> Void)?
@@ -396,28 +396,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         ],
         options: [.skipsHiddenFiles]
       )
-    } catch {
-      throw MailboxError.ioFailure
-    }
-  }
-
-  private func safeData(at url: URL) throws -> Data {
-    let values: URLResourceValues
-    do {
-      values = try url.resourceValues(forKeys: [
-        .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
-      ])
-    } catch {
-      throw MailboxError.unsafeFile
-    }
-    guard values.isRegularFile == true,
-      values.isSymbolicLink != true,
-      let size = values.fileSize,
-      size >= 0,
-      size <= limits.maxPayloadBytes
-    else { throw MailboxError.unsafeFile }
-    do {
-      return try Data(contentsOf: url, options: [.mappedIfSafe])
     } catch {
       throw MailboxError.ioFailure
     }

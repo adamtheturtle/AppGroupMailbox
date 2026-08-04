@@ -156,6 +156,25 @@ struct AppGroupMailboxTests {
     #expect(try Data(contentsOf: outside) == original)
   }
 
+  @Test("Reading remains anchored to the validated open file")
+  func fileReplacementDuringRead() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    let source = fixture.mailboxDirectory.appendingPathComponent("source.json")
+    let openedFile = fixture.root.appendingPathComponent("opened.json")
+    let replacement = fixture.root.appendingPathComponent("replacement.json")
+    let original = Data("original".utf8)
+    try original.write(to: source)
+    try Data("replacement".utf8).write(to: replacement)
+
+    let data = try mailbox.safeData(at: source) {
+      try FileManager.default.moveItem(at: source, to: openedFile)
+      try FileManager.default.createSymbolicLink(at: source, withDestinationURL: replacement)
+    }
+
+    #expect(data == original)
+  }
+
   @Test("Expired messages are removed")
   func expiration() throws {
     let fixture = try Fixture()

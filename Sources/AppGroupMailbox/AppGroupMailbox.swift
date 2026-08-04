@@ -451,14 +451,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     }
   }
 
-  private func nextOrdinal(from entries: [Entry]) throws -> UInt64 {
-    let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
-    let highest = entries.compactMap { Self.ordinal(from: $0.originalName) }.max() ?? 0
-    let (incremented, overflow) = highest.addingReportingOverflow(1)
-    guard !overflow else { throw MailboxError.ioFailure }
-    return max(now, incremented)
-  }
-
   private func withLock<T>(_ body: () throws -> T) throws -> T {
     let lockURL = directory.appendingPathComponent(".mailbox.lock", isDirectory: false)
     let descriptor = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
@@ -516,5 +508,24 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     #else
       [.atomic]
     #endif
+  }
+}
+
+extension AppGroupMailbox {
+  private func nextOrdinal(from entries: [Entry]) throws -> UInt64 {
+    let now = UInt64(max(0, Date().timeIntervalSince1970 * 1_000))
+    let pendingOrdinals = entries.compactMap { Self.ordinal(from: $0.originalName) }
+    let claimedOrdinals = try contents().compactMap { url -> UInt64? in
+      let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      guard values?.isRegularFile == true, values?.isSymbolicLink != true,
+        let originalName = Self.originalName(fromClaimName: url.lastPathComponent)
+      else { return nil }
+
+      return Self.ordinal(from: originalName)
+    }
+    let highest = (pendingOrdinals + claimedOrdinals).max() ?? 0
+    let (incremented, overflow) = highest.addingReportingOverflow(1)
+    guard !overflow else { throw MailboxError.ioFailure }
+    return max(now, incremented)
   }
 }

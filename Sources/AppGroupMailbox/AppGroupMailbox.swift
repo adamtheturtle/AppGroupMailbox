@@ -231,6 +231,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       try maintain(recoveredMessages: &shouldNotify)
       if try containsMessage(id: id) { return }
       var pending = try pendingEntries()
+      while try activeMessageCount() >= limits.maxMessages,
+        let malformedIndex = pending.firstIndex(where: { $0.enqueuedAt == nil })
+      {
+        let malformed = pending.remove(at: malformedIndex)
+        try quarantine(malformed.url)
+        diagnostic?(.malformedMessageQuarantined)
+      }
       if try activeMessageCount() >= limits.maxMessages {
         switch overflowPolicy {
         case .rejectNewest:

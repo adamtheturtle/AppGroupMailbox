@@ -213,6 +213,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   /// Pending or claimed messages with the same `id` are not duplicated.
   @discardableResult
   public func enqueue(_ message: Message, id: UUID, enqueuedAt: Date) throws -> UUID {
+    var shouldNotify = false
+    defer { if shouldNotify { postNotification() } }
     try withLock {
       let envelope = Envelope(id: id, enqueuedAt: enqueuedAt, message: message)
       let data: Data
@@ -226,7 +228,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           actualBytes: data.count, maximumBytes: limits.maxPayloadBytes)
       }
 
-      _ = try maintain()
+      try maintain(recoveredMessages: &shouldNotify)
       if try containsMessage(id: id) { return }
       var pending = try pendingEntries()
       if try activeMessageCount() >= limits.maxMessages {
@@ -250,15 +252,17 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
     }
 
-    postNotification()
+    shouldNotify = true
     return id
   }
 
   /// Claims pending messages in FIFO order. Concurrent consumers cannot claim the same file.
   public func claimPending(limit: Int? = nil) throws -> [Claim] {
     if let limit, limit < 0 { throw MailboxError.invalidLimit("claim limit") }
-    let (claims, recoveredMessages) = try withLock {
-      let recoveredMessages = try maintain()
+    var recoveredMessages = false
+    defer { if recoveredMessages { postNotification() } }
+    return try withLock {
+      try maintain(recoveredMessages: &recoveredMessages)
       let entries = try pendingEntries()
       let selected = limit.map { Array(entries.prefix($0)) } ?? entries
       var claims: [Claim] = []
@@ -267,16 +271,15 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           claims.append(claim)
         }
       }
-      return (claims, recoveredMessages)
+      return claims
     }
-    if recoveredMessages { postNotification() }
-    return claims
   }
 
   /// Performs expiry, abandoned-claim recovery, and bounded quarantine cleanup.
   public func performMaintenance() throws {
-    let recoveredMessages = try withLock { try maintain() }
-    if recoveredMessages { postNotification() }
+    var recoveredMessages = false
+    defer { if recoveredMessages { postNotification() } }
+    try withLock { try maintain(recoveredMessages: &recoveredMessages) }
   }
 
   private func claim(_ entry: Entry) throws -> Claim? {
@@ -333,9 +336,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     if !acknowledge { postNotification() }
   }
 
-  private func maintain() throws -> Bool {
+  private func maintain(recoveredMessages: inout Bool) throws {
     let now = Date()
-    var recoveredMessages = false
     let urls = try contents()
     for url in urls {
       let name = url.lastPathComponent
@@ -387,7 +389,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
     }
     try trimQuarantine()
-    return recoveredMessages
   }
 
   private func activeMessageCount() throws -> Int {

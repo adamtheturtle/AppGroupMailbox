@@ -145,6 +145,24 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending().map(\.message.value) == ["two", "three"])
   }
 
+  @Test("Malformed pending files are quarantined before overflow eviction")
+  func malformedPendingDoesNotDisplaceValidMessage() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(maxMessages: 2), overflowPolicy: .discardOldest)
+    try mailbox.enqueue(Message(value: "one"))
+    try Data("not json".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000001-malformed.json"
+      )
+    )
+
+    try mailbox.enqueue(Message(value: "two"))
+
+    #expect(try mailbox.claimPending().map(\.message.value) == ["one", "two"])
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(names.count(where: { $0.hasPrefix("quarantine-") }) == 1)
+  }
+
   @Test("Encoded payload size is bounded before writing")
   func payloadBound() throws {
     let fixture = try Fixture()

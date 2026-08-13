@@ -5,3 +5,9 @@
 --wraparguments before-first
 --wrapcollections before-first
 --wrapparameters before-first
+
+# SwiftFormat merges every config found between the input and filesystem root.
+# Undo app-workspace-only rules so nested and standalone checkouts behave alike.
+--disable blankLineAfterSwitchCase,blankLinesAfterGuardStatements,isEmpty,noExplicitOwnership
+--enable wrapMultilineStatementBraces
+--trailing-commas always

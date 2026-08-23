@@ -20,7 +20,7 @@ extension AppGroupMailbox {
     }
     let highest = (pendingOrdinals + claimedOrdinals).max() ?? 0
     let (incremented, overflow) = highest.addingReportingOverflow(1)
-    guard !overflow else { throw MailboxError.ioFailure }
+    guard !overflow else { throw MailboxError.ordinalExhausted }
     return max(now, incremented)
   }
 

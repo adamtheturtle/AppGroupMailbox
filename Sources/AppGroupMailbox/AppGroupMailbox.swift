@@ -64,6 +64,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     case payloadTooLarge(actualBytes: Int, maximumBytes: Int)
     case unsafeFile
     case claimNoLongerExists
+    case ordinalExhausted
     case ioFailure
     case encodingFailure
     case decodingFailure

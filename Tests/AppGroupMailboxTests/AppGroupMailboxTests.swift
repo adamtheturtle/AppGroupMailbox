@@ -802,4 +802,25 @@ struct AppGroupMailboxTests {
   }
 
 
+  @Test("Disabled quarantine retention reports discard instead of quarantine")
+  func zeroQuarantineRetentionEmitsDiscarded() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(maxQuarantinedFiles: 0),
+      diagnostic: diagnostics.record
+    )
+    try Data("not json".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000001-\(UUID().uuidString).json"
+      )
+    )
+
+    try mailbox.performMaintenance()
+
+    #expect(diagnostics.values == [.quarantinedFileDiscarded])
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(!names.contains { $0.hasPrefix("pending-") || $0.hasPrefix("quarantine-") })
+  }
+
 }

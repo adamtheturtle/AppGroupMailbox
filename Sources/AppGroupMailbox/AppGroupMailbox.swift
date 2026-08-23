@@ -56,6 +56,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     case unsafeFileQuarantined
     case malformedMessageQuarantined
     case oldestMessageDiscarded
+    case quarantinedFileDiscarded
     case unclaimableFilesPresent
   }
 
@@ -355,8 +356,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           })
         else { break }
         let malformed = pending.remove(at: malformedIndex)
-        try quarantine(malformed.url)
-        emitDiagnostic(.malformedMessageQuarantined)
+        if try quarantine(malformed.url) {
+          emitDiagnostic(.malformedMessageQuarantined)
+        }
       }
       if try activeMessageCount() >= limits.maxMessages {
         switch overflowPolicy {
@@ -427,8 +429,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           try fileManager.moveItem(at: claimURL, to: entry.url)
         } catch {
           // Avoid split-brain (pending gone, claim present) when rollback fails.
-          try quarantine(claimURL)
-          emitDiagnostic(.unsafeFileQuarantined)
+          if try quarantine(claimURL) {
+            emitDiagnostic(.unsafeFileQuarantined)
+          }
         }
       }
       throw MailboxError.ioFailure
@@ -438,8 +441,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       let data = try safeData(at: claimURL)
       let envelope = try decoder.decode(Envelope.self, from: data)
       guard envelope.messageType.isEmpty || envelope.messageType == messageTypeIdentifier else {
-        try quarantine(claimURL)
-        emitDiagnostic(.malformedMessageQuarantined)
+        if try quarantine(claimURL) {
+          emitDiagnostic(.malformedMessageQuarantined)
+        }
         return nil
       }
       return Claim(
@@ -451,22 +455,25 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         originalName: entry.originalName
       )
     } catch let error as MailboxError where error == .unsafeFile {
-      try quarantine(claimURL)
-      emitDiagnostic(.unsafeFileQuarantined)
+      if try quarantine(claimURL) {
+        emitDiagnostic(.unsafeFileQuarantined)
+      }
       return nil
     } catch let error as MailboxError where error == .ioFailure {
       // Restore pending so transient read failures do not permanently drop messages.
       do {
         try fileManager.moveItem(at: claimURL, to: entry.url)
       } catch {
-        try quarantine(claimURL)
-        emitDiagnostic(.unsafeFileQuarantined)
+        if try quarantine(claimURL) {
+          emitDiagnostic(.unsafeFileQuarantined)
+        }
       }
       return nil
     } catch {
       // DecodingError and custom Message Decodable failures are permanent.
-      try quarantine(claimURL)
-      emitDiagnostic(.malformedMessageQuarantined)
+      if try quarantine(claimURL) {
+        emitDiagnostic(.malformedMessageQuarantined)
+      }
       return nil
     }
   }
@@ -481,8 +488,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           let destination = directory.appendingPathComponent(originalName, isDirectory: false)
           if fileManager.fileExists(atPath: destination.path) {
             // Conflicting pending file blocks release; quarantine it so the claim can return.
-            try quarantine(destination)
-            emitDiagnostic(.unsafeFileQuarantined)
+            if try quarantine(destination) {
+              emitDiagnostic(.unsafeFileQuarantined)
+            }
           }
           try fileManager.moveItem(at: url, to: destination)
         }
@@ -523,15 +531,17 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         continue
       }
       guard values?.isRegularFile == true, values?.isSymbolicLink != true else {
-        try quarantine(url)
-        emitDiagnostic(.unsafeFileQuarantined)
+        if try quarantine(url) {
+          emitDiagnostic(.unsafeFileQuarantined)
+        }
         continue
       }
       let claimedOriginalName: String?
       if name.hasPrefix("claimed-") {
         guard let originalName = Self.originalName(fromClaimName: name) else {
-          try quarantine(url)
-          emitDiagnostic(.unsafeFileQuarantined)
+          if try quarantine(url) {
+            emitDiagnostic(.unsafeFileQuarantined)
+          }
           continue
         }
         claimedOriginalName = originalName
@@ -542,8 +552,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       let claimAge = now.timeIntervalSince(modificationDate)
       let enqueuedAt = enqueuedAt(from: url)
       if name.hasPrefix("pending-"), enqueuedAt == nil {
-        try quarantine(url)
-        emitDiagnostic(.malformedMessageQuarantined)
+        if try quarantine(url) {
+          emitDiagnostic(.malformedMessageQuarantined)
+        }
         continue
       }
       let messageAge = now.timeIntervalSince(enqueuedAt ?? modificationDate)
@@ -562,8 +573,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       {
         if messageAge > limits.messageLifetime {
           if enqueuedAt == nil {
-            try quarantine(url)
-            emitDiagnostic(.malformedMessageQuarantined)
+            if try quarantine(url) {
+              emitDiagnostic(.malformedMessageQuarantined)
+            }
           } else {
             do {
               try fileManager.removeItem(at: url)
@@ -580,8 +592,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         let destination = directory.appendingPathComponent(original, isDirectory: false)
         if fileManager.fileExists(atPath: destination.path) {
           // Conflicting pending file blocks restore; quarantine it so the claim can return.
-          try quarantine(destination)
-          emitDiagnostic(.unsafeFileQuarantined)
+          if try quarantine(destination) {
+            emitDiagnostic(.unsafeFileQuarantined)
+          }
         }
         if (try? fileManager.moveItem(at: url, to: destination)) != nil {
           recoveredMessages = true
@@ -676,10 +689,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     return false
   }
 
-  private func quarantine(_ url: URL, messageID: UUID? = nil) throws {
+  /// - Returns: `true` when the file was retained under quarantine; `false` when discarded.
+  @discardableResult
+  private func quarantine(_ url: URL, messageID: UUID? = nil) throws -> Bool {
     guard limits.maxQuarantinedFiles > 0 else {
       try? fileManager.removeItem(at: url)
-      return
+      emitDiagnostic(.quarantinedFileDiscarded)
+      return false
     }
     let idComponent =
       messageID?.uuidString
@@ -696,11 +712,12 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     do {
       try fileManager.moveItem(at: url, to: destination)
     } catch let error as CocoaError where error.code == .fileNoSuchFile {
-      return
+      return false
     } catch {
       throw MailboxError.ioFailure
     }
     try trimQuarantine()
+    return true
   }
 
   func contents() throws -> [URL] {

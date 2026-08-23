@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- Emit quarantinedFileDiscarded without also reporting a quarantine success (#116).
 - Restore abandoned claims by quarantining conflicting pending files (#115).
 - Quarantine permanent custom Message decoding failures during claim (#114).
 - Map expiry and quarantine-trim deletion failures to MailboxError.ioFailure (#113).

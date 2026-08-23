@@ -37,6 +37,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Decode only envelope timestamps when ordering pending files for claim.
 - Defer diagnostic callbacks until after the mailbox lock is released.
 - Add `Claim.renew()` and use a weak mailbox reference so claims do not pin mailbox instances.
+- Quarantine malformed pending files during maintenance instead of leaving them until claim.
 - Abandoned-claim recovery quarantines conflicting pending files and surfaces failed restore moves (#27, #28).
 - Count hard-linked pending/claimed files once toward maxMessages (#50).
 - Remove orphan pending-/claimed- directories during maintenance (#51).

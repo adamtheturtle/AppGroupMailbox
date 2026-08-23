@@ -581,6 +581,25 @@ struct AppGroupMailboxTests {
     try claim.acknowledge()
   }
 
+
+  @Test("Malformed pending files are quarantined during maintenance")
+  func malformedPendingQuarantinedDuringMaintenance() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    let id = UUID()
+    try Data("not json".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000001-\(id.uuidString).json"
+      )
+    )
+
+    try mailbox.performMaintenance()
+
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(!names.contains { $0.contains(id.uuidString) && $0.hasPrefix("pending-") })
+    #expect(names.contains { $0.hasPrefix("quarantine-") && $0.contains(id.uuidString) })
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

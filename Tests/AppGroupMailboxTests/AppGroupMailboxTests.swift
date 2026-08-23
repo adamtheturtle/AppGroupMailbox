@@ -632,6 +632,34 @@ struct AppGroupMailboxTests {
     )
   }
 
+  @Test("Pending files with undecodable messages are quarantined before overflow eviction")
+  func undecodableMessageQuarantinedBeforeOverflow() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(maxMessages: 2), overflowPolicy: .discardOldest)
+    try mailbox.enqueue(Message(value: "keep"))
+    let corruptID = UUID()
+    // Valid enqueuedAt / envelope shape but message is the wrong JSON type.
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "messageType": String(reflecting: Message.self),
+      "id": corruptID.uuidString,
+      "enqueuedAt": Date().timeIntervalSince1970,
+      "message": ["value": 123],
+    ]
+    try JSONSerialization.data(withJSONObject: payload).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        AppGroupMailbox<Message>.pendingFileName(ordinal: 1, id: corruptID)
+      )
+    )
+
+    try mailbox.enqueue(Message(value: "new"))
+
+    #expect(try mailbox.claimPending().map(\.message.value) == ["keep", "new"])
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(names.contains { $0.hasPrefix("quarantine-") && $0.contains(corruptID.uuidString) })
+  }
+
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

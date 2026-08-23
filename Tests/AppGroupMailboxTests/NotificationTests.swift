@@ -116,7 +116,6 @@
 
       #expect(await recorder.receivedNotification(after: baseline))
     }
-  }
 
     @Test("Discarding the oldest message notifies consumers")
     func discardOldestNotification() async throws {
@@ -135,6 +134,9 @@
 
       #expect(await recorder.receivedNotification(after: baseline))
       #expect(try mailbox.claimPending().map(\.message.value) == ["two"])
+    }
+
+  }
 
   private final class DarwinNotificationRecorder: @unchecked Sendable {
     let name = "AppGroupMailboxTests.\(UUID().uuidString)"

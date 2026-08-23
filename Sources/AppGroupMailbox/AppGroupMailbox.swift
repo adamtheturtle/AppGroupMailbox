@@ -398,6 +398,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     if !acknowledge { postNotification() }
   }
 
+  // swiftlint:disable:next cyclomatic_complexity
   private func maintain(recoveredMessages: inout Bool) throws {
     let now = Date()
     let urls = try contents()

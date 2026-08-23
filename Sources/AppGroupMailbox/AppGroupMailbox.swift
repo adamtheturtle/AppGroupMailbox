@@ -282,7 +282,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
   /// Resolves an App Group container and creates a mailbox inside it.
   ///
-  /// - Parameter appGroupIdentifier: App Group identifier passed to `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`.
+  /// - Parameter appGroupIdentifier: App Group identifier passed to
+  ///   `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`.
   /// - Parameter namespace: Logical mailbox name under `AppGroupMailbox/` inside the container.
   /// - Parameter limits: Size and retention limits for pending envelopes.
   /// - Parameter overflowPolicy: Behavior when enqueue would exceed configured limits.

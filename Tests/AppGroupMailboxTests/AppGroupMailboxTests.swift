@@ -393,7 +393,7 @@ struct AppGroupMailboxTests {
       // roots already isolate runs (see #68); a UUID default per process would
       // make claims.count == 0.
       process.arguments = [
-        "enqueue", fixture.root.path, String(producer * 20), "20", "multiprocess",
+        "enqueue", fixture.root.path, String(producer * 20), "20", "multiprocess", "MultiprocessTestMessage",
       ]
       return process
     }
@@ -406,7 +406,8 @@ struct AppGroupMailboxTests {
     let mailbox = try AppGroupMailbox<Message>(
       containerURL: fixture.root,
       namespace: "multiprocess",
-      limits: .init(maxMessages: 200)
+      limits: .init(maxMessages: 200),
+      messageType: "MultiprocessTestMessage"
     )
     let claims = try mailbox.claimPending()
     #expect(claims.count == 80)
@@ -598,6 +599,23 @@ struct AppGroupMailboxTests {
     let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
     #expect(!names.contains { $0.contains(id.uuidString) && $0.hasPrefix("pending-") })
     #expect(names.contains { $0.hasPrefix("quarantine-") && $0.contains(id.uuidString) })
+  }
+
+
+  @Test("Different message types cannot share a namespace")
+  func messageTypeGuard() throws {
+    struct OtherMessage: Codable, Sendable { let value: String }
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    try mailbox.enqueue(Message(value: "typed"))
+
+    let other = try AppGroupMailbox<OtherMessage>(
+      containerURL: fixture.root,
+      namespace: "tests"
+    )
+    #expect(try other.claimPending().isEmpty)
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(names.contains { $0.hasPrefix("quarantine-") })
   }
 
   @Test(

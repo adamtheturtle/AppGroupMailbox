@@ -491,8 +491,6 @@ struct AppGroupMailboxTests {
     }
   }
 
-
-
   @Test("MailboxError provides localized descriptions and is Hashable")
   func mailboxErrorProtocols() {
     let errors: Set<AppGroupMailbox<Message>.MailboxError> = [
@@ -527,7 +525,6 @@ struct AppGroupMailboxTests {
     )
   }
 
-
   @Test("Hard-linked pending files count once toward capacity")
   func hardLinkedPendingCountsOnce() throws {
     let fixture = try Fixture()
@@ -549,7 +546,6 @@ struct AppGroupMailboxTests {
     }
     _ = id
   }
-
 
   @Test("Diagnostics are delivered after releasing the mailbox lock")
   func diagnosticReentrancy() throws {
@@ -586,7 +582,6 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending().isEmpty)
     try claim.acknowledge()
   }
-
 
   @Test("Malformed pending files are quarantined during maintenance")
   func malformedPendingQuarantinedDuringMaintenance() throws {

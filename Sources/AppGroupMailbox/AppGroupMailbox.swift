@@ -52,6 +52,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     case unsafeFileQuarantined
     case malformedMessageQuarantined
     case oldestMessageDiscarded
+    case quarantinedFileDiscarded
   }
 
   /// Failures produced by mailbox operations. No case contains message contents.
@@ -428,10 +429,15 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   private func quarantine(_ url: URL) throws {
     guard limits.maxQuarantinedFiles > 0 else {
       try? fileManager.removeItem(at: url)
+      diagnostic?(.quarantinedFileDiscarded)
       return
     }
     let destination = directory.appendingPathComponent(
-      "quarantine-\(UInt64(Date().timeIntervalSince1970 * 1_000))-\(UUID().uuidString).bin",
+      String(
+        format: "quarantine-%020llu-%@.bin",
+        UInt64(Date().timeIntervalSince1970 * 1_000),
+        UUID().uuidString
+      ),
       isDirectory: false
     )
     do {

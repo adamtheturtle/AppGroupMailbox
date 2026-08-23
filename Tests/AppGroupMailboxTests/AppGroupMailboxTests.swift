@@ -409,6 +409,24 @@ struct AppGroupMailboxTests {
     #expect(Set(claims.map(\.message.value)).count == 80)
   }
 
+  @Test("Quarantine disabled emits a diagnostic when discarding unsafe input")
+  func quarantineDisabledDiagnostic() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(maxQuarantinedFiles: 0),
+      diagnostic: diagnostics.record
+    )
+    try Data("not json".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000001-bad.json"
+      )
+    )
+
+    #expect(try mailbox.claimPending().isEmpty)
+    #expect(diagnostics.values.contains(.quarantinedFileDiscarded))
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root", arguments: ["", ".", "..", "../escape", "a/b"])
   func invalidNamespace(namespace: String) throws {

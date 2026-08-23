@@ -158,6 +158,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   private let fileManager: FileManager
   private let encoder = JSONEncoder()
   let decoder = JSONDecoder()
+  private var lockedDiagnostics: [Diagnostic] = []
+  private var isLockedForDiagnostics = false
 
   /// Creates a mailbox inside `containerURL/AppGroupMailbox/<namespace>`.
   public init(
@@ -269,7 +271,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       {
         let malformed = pending.remove(at: malformedIndex)
         try quarantine(malformed.url)
-        diagnostic?(.malformedMessageQuarantined)
+        emitDiagnostic(.malformedMessageQuarantined)
       }
       if try activeMessageCount() >= limits.maxMessages {
         switch overflowPolicy {
@@ -278,7 +280,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         case .discardOldest:
           guard !pending.isEmpty else { throw MailboxError.mailboxFull }
           try fileManager.removeItem(at: pending.removeFirst().url)
-          diagnostic?(.oldestMessageDiscarded)
+          emitDiagnostic(.oldestMessageDiscarded)
         }
       }
 
@@ -337,7 +339,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         } catch {
           // Avoid split-brain (pending gone, claim present) when rollback fails.
           try quarantine(claimURL)
-          diagnostic?(.unsafeFileQuarantined)
+          emitDiagnostic(.unsafeFileQuarantined)
         }
       }
       throw MailboxError.ioFailure
@@ -356,11 +358,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       )
     } catch let error as MailboxError where error == .unsafeFile {
       try quarantine(claimURL)
-      diagnostic?(.unsafeFileQuarantined)
+      emitDiagnostic(.unsafeFileQuarantined)
       return nil
     } catch is DecodingError {
       try quarantine(claimURL)
-      diagnostic?(.malformedMessageQuarantined)
+      emitDiagnostic(.malformedMessageQuarantined)
       return nil
     } catch {
       // Restore pending so transient read failures do not permanently drop messages.
@@ -368,7 +370,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         try fileManager.moveItem(at: claimURL, to: entry.url)
       } catch {
         try quarantine(claimURL)
-        diagnostic?(.malformedMessageQuarantined)
+        emitDiagnostic(.malformedMessageQuarantined)
       }
       return nil
     }
@@ -385,7 +387,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           if fileManager.fileExists(atPath: destination.path) {
             // Conflicting pending file blocks release; quarantine it so the claim can return.
             try quarantine(destination)
-            diagnostic?(.unsafeFileQuarantined)
+            emitDiagnostic(.unsafeFileQuarantined)
           }
           try fileManager.moveItem(at: url, to: destination)
         }
@@ -411,19 +413,19 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       if values?.isDirectory == true {
         // Orphan directories with mailbox prefixes are not messages; remove them.
         try? fileManager.removeItem(at: url)
-        diagnostic?(.unsafeFileQuarantined)
+        emitDiagnostic(.unsafeFileQuarantined)
         continue
       }
       guard values?.isRegularFile == true, values?.isSymbolicLink != true else {
         try quarantine(url)
-        diagnostic?(.unsafeFileQuarantined)
+        emitDiagnostic(.unsafeFileQuarantined)
         continue
       }
       let claimedOriginalName: String?
       if name.hasPrefix("claimed-") {
         guard let originalName = Self.originalName(fromClaimName: name) else {
           try quarantine(url)
-          diagnostic?(.unsafeFileQuarantined)
+          emitDiagnostic(.unsafeFileQuarantined)
           continue
         }
         claimedOriginalName = originalName
@@ -443,11 +445,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       if name.hasPrefix("pending-"), messageAge > limits.messageLifetime {
         if decoded == nil {
           try quarantine(url)
-          diagnostic?(.malformedMessageQuarantined)
+          emitDiagnostic(.malformedMessageQuarantined)
         } else {
           do {
             try fileManager.removeItem(at: url)
-            diagnostic?(.expiredMessageRemoved)
+            emitDiagnostic(.expiredMessageRemoved)
             recoveredMessages = true
           } catch let error as CocoaError where error.code == .fileNoSuchFile {
             continue
@@ -459,11 +461,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         if messageAge > limits.messageLifetime {
           if decoded == nil {
             try quarantine(url)
-            diagnostic?(.malformedMessageQuarantined)
+            emitDiagnostic(.malformedMessageQuarantined)
           } else {
             do {
               try fileManager.removeItem(at: url)
-              diagnostic?(.expiredMessageRemoved)
+              emitDiagnostic(.expiredMessageRemoved)
               recoveredMessages = true
             } catch let error as CocoaError where error.code == .fileNoSuchFile {
               continue
@@ -475,11 +477,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         if !fileManager.fileExists(atPath: destination.path) {
           if (try? fileManager.moveItem(at: url, to: destination)) != nil {
             recoveredMessages = true
-            diagnostic?(.abandonedClaimRecovered)
+            emitDiagnostic(.abandonedClaimRecovered)
           }
         } else {
           try quarantine(url)
-          diagnostic?(.unsafeFileQuarantined)
+          emitDiagnostic(.unsafeFileQuarantined)
         }
       }
     }
@@ -684,6 +686,31 @@ extension AppGroupMailbox {
       body.dropFirst(20).first == "-"
     else { return nil }
     return UUID(uuidString: String(body.suffix(36)))
+
+  func beginLockedDiagnostics() {
+    isLockedForDiagnostics = true
+    lockedDiagnostics.removeAll(keepingCapacity: true)
+  }
+
+  func endLockedDiagnostics() {
+    isLockedForDiagnostics = false
+    guard let diagnostic, !lockedDiagnostics.isEmpty else {
+      lockedDiagnostics.removeAll(keepingCapacity: false)
+      return
+    }
+    let batch = lockedDiagnostics
+    lockedDiagnostics.removeAll(keepingCapacity: false)
+    for event in batch {
+      diagnostic(event)
+    }
+  }
+
+  func emitDiagnostic(_ event: Diagnostic) {
+    if isLockedForDiagnostics {
+      lockedDiagnostics.append(event)
+    } else {
+      diagnostic?(event)
+    }
   }
 
   private var writeOptions: Data.WritingOptions {

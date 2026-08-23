@@ -48,6 +48,8 @@ extension AppGroupMailbox {
 
     guard flock(descriptor, LOCK_EX) == 0 else { throw MailboxError.ioFailure }
     defer { flock(descriptor, LOCK_UN) }
+    beginLockedDiagnostics()
+    defer { endLockedDiagnostics() }
     return try body()
   }
 }

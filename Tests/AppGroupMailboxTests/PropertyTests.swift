@@ -7,25 +7,22 @@ import Testing
 struct PropertyTests {
   @Test("Repeated enqueue with the same ID is idempotent", arguments: 0..<25)
   func idempotentEnqueue(seed: Int) throws {
-    var generator = SeededGenerator(seed: UInt64(truncatingIfNeeded: seed))
     let fixture = try Fixture()
-    let mailbox = try fixture.mailbox(limits: .init(maxMessages: 10))
-    var ids: [UUID] = []
+    let mailbox = try fixture.mailbox(limits: .init(maxMessages: 1))
+    let id = UUID()
 
-    for _ in 0..<15 {
-      let id = UUID()
-      ids.append(id)
-      try mailbox.enqueue(AppGroupMailboxTests.Message(value: "first-\(seed)"), id: id)
-      try mailbox.enqueue(AppGroupMailboxTests.Message(value: "retry-\(seed)"), id: id)
+    for attempt in 0..<10 {
+      try mailbox.enqueue(
+        AppGroupMailboxTests.Message(value: "first-\(seed)-\(attempt)"), id: id)
+      try mailbox.enqueue(
+        AppGroupMailboxTests.Message(value: "retry-\(seed)-\(attempt)"), id: id)
     }
 
     let claims = try mailbox.claimPending()
-    #expect(claims.count == ids.count)
-    #expect(Set(claims.map(\.id)) == Set(ids))
-    for claim in claims {
-      #expect(claim.message.value == "first-\(seed)")
-      try claim.acknowledge()
-    }
+    #expect(claims.count == 1)
+    #expect(claims.first?.id == id)
+    #expect(claims.first?.message.value == "first-\(seed)-0")
+    try claims.first?.acknowledge()
   }
 
   @Test("Pending depth never exceeds maxMessages", arguments: 0..<25)
@@ -35,11 +32,13 @@ struct PropertyTests {
     let maxMessages = Int.random(in: 1...6, using: &generator)
     let mailbox = try fixture.mailbox(limits: .init(maxMessages: maxMessages))
 
-    var inserted = 0
-    while inserted < maxMessages {
-      try mailbox.enqueue(AppGroupMailboxTests.Message(value: "\(seed)-\(inserted)"))
-      inserted += 1
-      #expect(try mailbox.claimPending().count <= maxMessages)
+    for index in 0..<maxMessages {
+      try mailbox.enqueue(AppGroupMailboxTests.Message(value: "\(seed)-\(index)"))
+      let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+      let pendingCount = names.count {
+        $0.hasPrefix("pending-") && $0.hasSuffix(".json")
+      }
+      #expect(pendingCount <= maxMessages)
     }
 
     #expect(throws: AppGroupMailbox<AppGroupMailboxTests.Message>.MailboxError.mailboxFull) {

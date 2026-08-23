@@ -441,6 +441,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       let enqueuedAt = decoded?.enqueuedAt
       let messageAge = now.timeIntervalSince(enqueuedAt ?? modificationDate)
       if name.hasPrefix("pending-"), messageAge > limits.messageLifetime {
+<<<<<<< HEAD
         if decoded == nil {
           try quarantine(url)
           diagnostic?(.malformedMessageQuarantined)
@@ -452,10 +453,16 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
             continue
           }
         }
+=======
+        try? fileManager.removeItem(at: url)
+        diagnostic?(.expiredMessageRemoved)
+        recoveredMessages = true
+>>>>>>> 89b6176 (Notify consumers when expired messages are removed.)
       } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
       {
         if messageAge > limits.messageLifetime {
+<<<<<<< HEAD
           if decoded == nil {
             try quarantine(url)
             diagnostic?(.malformedMessageQuarantined)
@@ -467,6 +474,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
               continue
             }
           }
+=======
+          try? fileManager.removeItem(at: url)
+          diagnostic?(.expiredMessageRemoved)
+          recoveredMessages = true
+>>>>>>> 89b6176 (Notify consumers when expired messages are removed.)
           continue
         }
         let destination = directory.appendingPathComponent(original, isDirectory: false)

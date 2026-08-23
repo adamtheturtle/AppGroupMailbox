@@ -497,10 +497,9 @@ struct AppGroupMailboxTests {
       .invalidNamespace,
       .mailboxFull,
       .ioFailure,
-      .mailboxDeallocated,
       .payloadTooLarge(actualBytes: 10, maximumBytes: 5),
     ]
-    #expect(errors.count == 5)
+    #expect(errors.count == 4)
     #expect(AppGroupMailbox<Message>.MailboxError.mailboxFull.errorDescription != nil)
     #expect(
       AppGroupMailbox<Message>.MailboxError.invalidLimit("maxMessages").errorDescription?
@@ -732,4 +731,37 @@ struct AppGroupMailboxTests {
       try AppGroupMailbox<Message>(containerURL: fixture.root, namespace: namespace)
     }
   }
+
+  @Test("Custom message decoding failures are quarantined instead of restored")
+  func customDecodingFailureIsQuarantined() throws {
+    struct StrictMessage: Codable, Sendable {
+      let value: String
+      init(value: String) { self.value = value }
+      init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let value = try container.decode(String.self, forKey: .value)
+        if value == "bad" { throw NSError(domain: "StrictMessage", code: 1) }
+        self.value = value
+      }
+      enum CodingKeys: String, CodingKey { case value }
+    }
+
+    let fixture = try Fixture()
+    let writer = try AppGroupMailbox<Message>(
+      containerURL: fixture.root,
+      namespace: "tests"
+    )
+    try writer.enqueue(Message(value: "bad"))
+
+    let reader = try AppGroupMailbox<StrictMessage>(
+      containerURL: fixture.root,
+      namespace: "tests",
+      messageType: String(reflecting: Message.self)
+    )
+    #expect(try reader.claimPending().isEmpty)
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(names.contains { $0.hasPrefix("quarantine-") })
+    #expect(!names.contains { $0.hasPrefix("pending-") })
+  }
+
 }

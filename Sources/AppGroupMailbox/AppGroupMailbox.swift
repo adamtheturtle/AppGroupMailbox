@@ -454,18 +454,19 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       try quarantine(claimURL)
       emitDiagnostic(.unsafeFileQuarantined)
       return nil
-    } catch is DecodingError {
-      try quarantine(claimURL)
-      emitDiagnostic(.malformedMessageQuarantined)
-      return nil
-    } catch {
+    } catch let error as MailboxError where error == .ioFailure {
       // Restore pending so transient read failures do not permanently drop messages.
       do {
         try fileManager.moveItem(at: claimURL, to: entry.url)
       } catch {
         try quarantine(claimURL)
-        emitDiagnostic(.malformedMessageQuarantined)
+        emitDiagnostic(.unsafeFileQuarantined)
       }
+      return nil
+    } catch {
+      // DecodingError and custom Message Decodable failures are permanent.
+      try quarantine(claimURL)
+      emitDiagnostic(.malformedMessageQuarantined)
       return nil
     }
   }

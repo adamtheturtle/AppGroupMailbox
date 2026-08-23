@@ -676,7 +676,6 @@ struct AppGroupMailboxTests {
     #expect(!diagnostics.values.contains(.unclaimableFilesPresent))
   }
 
-
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

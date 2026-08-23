@@ -345,7 +345,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         switch overflowPolicy {
         case .rejectNewest:
           if try unclaimableFilesPresent() {
-            diagnostic?(.unclaimableFilesPresent)
+            emitDiagnostic(.unclaimableFilesPresent)
           }
           throw MailboxError.mailboxFull
         case .discardOldest:

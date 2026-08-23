@@ -553,6 +553,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           recoveredMessages = true
         } catch let error as CocoaError where error.code == .fileNoSuchFile {
           continue
+        } catch {
+          throw MailboxError.ioFailure
         }
       } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
@@ -568,6 +570,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
               recoveredMessages = true
             } catch let error as CocoaError where error.code == .fileNoSuchFile {
               continue
+            } catch {
+              throw MailboxError.ioFailure
             }
           }
           continue
@@ -724,6 +728,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         try fileManager.removeItem(at: url)
       } catch let error as CocoaError where error.code == .fileNoSuchFile {
         continue
+      } catch {
+        throw MailboxError.ioFailure
       }
     }
   }

@@ -118,6 +118,24 @@
     }
   }
 
+    @Test("Discarding the oldest message notifies consumers")
+    func discardOldestNotification() async throws {
+      let fixture = try Fixture()
+      let recorder = DarwinNotificationRecorder()
+      let mailbox = try fixture.mailbox(
+        limits: .init(maxMessages: 1),
+        overflowPolicy: .discardOldest,
+        notificationName: recorder.name
+      )
+      try mailbox.enqueue(.init(value: "one"))
+      #expect(await recorder.receivedNotification(after: 0))
+      let baseline = recorder.count
+
+      try mailbox.enqueue(.init(value: "two"))
+
+      #expect(await recorder.receivedNotification(after: baseline))
+      #expect(try mailbox.claimPending().map(\.message.value) == ["two"])
+
   private final class DarwinNotificationRecorder: @unchecked Sendable {
     let name = "AppGroupMailboxTests.\(UUID().uuidString)"
 

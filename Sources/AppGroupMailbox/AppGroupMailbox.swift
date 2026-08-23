@@ -170,6 +170,10 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   private var isLockedForDiagnostics = false
 
   /// Creates a mailbox inside `containerURL/AppGroupMailbox/<namespace>`.
+  ///
+  /// - Parameter notificationName: On Darwin platforms, posts a payload-free Darwin notification
+  ///   after enqueueing and when messages become pending again. On other platforms this parameter
+  ///   is accepted for API compatibility but notifications are not delivered.
   public init(
     containerURL: URL,
     namespace: String,
@@ -291,6 +295,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           guard !pending.isEmpty else { throw MailboxError.mailboxFull }
           try fileManager.removeItem(at: pending.removeFirst().url)
           emitDiagnostic(.oldestMessageDiscarded)
+          shouldNotify = true
         }
       }
 

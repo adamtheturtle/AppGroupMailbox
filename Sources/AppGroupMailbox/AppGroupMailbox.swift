@@ -148,9 +148,45 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 
   struct Envelope: Codable, Sendable {
+    let schemaVersion: Int
+    let messageType: String
     let id: UUID
     let enqueuedAt: Date
     let message: Message
+
+    init(id: UUID, enqueuedAt: Date, message: Message, messageType: String) {
+      schemaVersion = 1
+      self.messageType = messageType
+      self.id = id
+      self.enqueuedAt = enqueuedAt
+      self.message = message
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+      messageType = try container.decodeIfPresent(String.self, forKey: .messageType) ?? ""
+      id = try container.decode(UUID.self, forKey: .id)
+      enqueuedAt = try container.decode(Date.self, forKey: .enqueuedAt)
+      message = try container.decode(Message.self, forKey: .message)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+      case schemaVersion
+      case messageType
+      case id
+      case enqueuedAt
+      case message
+    }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      try container.encode(schemaVersion, forKey: .schemaVersion)
+      try container.encode(messageType, forKey: .messageType)
+      try container.encode(id, forKey: .id)
+      try container.encode(enqueuedAt, forKey: .enqueuedAt)
+      try container.encode(message, forKey: .message)
+    }
   }
 
   struct Entry {
@@ -159,10 +195,15 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     let enqueuedAt: Date?
   }
 
+  private static var envelopeMessageType: String {
+    String(reflecting: Message.self)
+  }
+
   let directory: URL
   let limits: Limits
   private let overflowPolicy: OverflowPolicy
   let notificationName: String?
+  private let messageTypeIdentifier: String
   private let diagnostic: (@Sendable (Diagnostic) -> Void)?
   private let fileManager: FileManager
   private let encoder = JSONEncoder()
@@ -175,12 +216,16 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   /// - Parameter notificationName: On Darwin platforms, posts a payload-free Darwin notification
   ///   after enqueueing and when messages become pending again. On other platforms this parameter
   ///   is accepted for API compatibility but notifications are not delivered.
+  /// - Parameter messageType: An optional stable tag stored in each envelope so different
+  ///   generic specializations cannot corrupt a shared namespace. Defaults to the reflected
+  ///   `Message` type name.
   public init(
     containerURL: URL,
     namespace: String,
     limits: Limits = .init(),
     overflowPolicy: OverflowPolicy = .rejectNewest,
     notificationName: String? = nil,
+    messageType: String? = nil,
     diagnostic: (@Sendable (Diagnostic) -> Void)? = nil
   ) throws {
     guard Self.isValidNamespace(namespace) else { throw MailboxError.invalidNamespace }
@@ -207,6 +252,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     self.limits = limits
     self.overflowPolicy = overflowPolicy
     self.notificationName = notificationName
+    self.messageTypeIdentifier = messageType ?? Self.envelopeMessageType
     self.diagnostic = diagnostic
     self.fileManager = fileManager
     encoder.dateEncodingStrategy = .secondsSince1970
@@ -220,6 +266,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     limits: Limits = .init(),
     overflowPolicy: OverflowPolicy = .rejectNewest,
     notificationName: String? = nil,
+    messageType: String? = nil,
     diagnostic: (@Sendable (Diagnostic) -> Void)? = nil
   ) throws {
     #if canImport(Darwin)
@@ -234,6 +281,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         limits: limits,
         overflowPolicy: overflowPolicy,
         notificationName: notificationName,
+        messageType: messageType,
         diagnostic: diagnostic
       )
     #else
@@ -266,7 +314,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     var shouldNotify = false
     defer { if shouldNotify { postNotification() } }
     try withLock {
-      let envelope = Envelope(id: id, enqueuedAt: enqueuedAt, message: message)
+      let envelope = Envelope(
+        id: id, enqueuedAt: enqueuedAt, message: message, messageType: messageTypeIdentifier)
       let data: Data
       do {
         data = try encoder.encode(envelope)
@@ -367,6 +416,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     do {
       let data = try safeData(at: claimURL)
       let envelope = try decoder.decode(Envelope.self, from: data)
+      guard envelope.messageType.isEmpty || envelope.messageType == messageTypeIdentifier else {
+        try quarantine(claimURL)
+        emitDiagnostic(.malformedMessageQuarantined)
+        return nil
+      }
       return Claim(
         id: envelope.id,
         message: envelope.message,

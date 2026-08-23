@@ -43,6 +43,10 @@ back to pending and when an abandoned claim is recovered:
 try mailbox.enqueue(.selectItem(id: itemID))
 ```
 
+Darwin notifications are coalesced by the system. A single callback may correspond to many
+enqueues, so consumers should drain `claimPending()` until empty rather than assuming one
+notification maps to one message.
+
 When importing another durable queue, supply its stable record ID. Retrying the import succeeds
 without writing a duplicate while that ID is pending or claimed:
 

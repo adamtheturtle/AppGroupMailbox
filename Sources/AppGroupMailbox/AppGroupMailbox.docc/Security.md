@@ -20,3 +20,11 @@ Enqueue writes a complete envelope atomically while holding a cross-process advi
 atomically renames the pending file. This provides at-least-once delivery: an acknowledged claim is
 removed, a released claim is immediately retried, and a crash-abandoned claim is retried after
 ``AppGroupMailbox/AppGroupMailbox/Limits/claimTimeout``. Handlers therefore should be idempotent.
+
+On iOS-family platforms, queue files use `completeFileProtectionUntilFirstUserAuthentication`.
+Mailbox operations that touch the queue can fail until the user unlocks the device once after
+reboot.
+
+Darwin notifications posted after enqueue or recovery are payload-free and may be coalesced.
+Treat each delivery as a hint to drain pending messages rather than a 1:1 mapping to individual
+enqueues.

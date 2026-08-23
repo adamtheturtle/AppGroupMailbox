@@ -4,6 +4,8 @@ import Testing
 @testable import AppGroupMailbox
 
 @Suite("AppGroupMailbox")
+// Multiprocess and capacity suites keep shared helpers in one type.
+// swiftlint:disable:next type_body_length file_length
 struct AppGroupMailboxTests {
   struct Message: Codable, Sendable, Equatable {
     let value: String
@@ -490,8 +492,6 @@ struct AppGroupMailboxTests {
     }
   }
 
-
-
   @Test("MailboxError provides localized descriptions and is Hashable")
   func mailboxErrorProtocols() {
     let errors: Set<AppGroupMailbox<Message>.MailboxError> = [
@@ -521,7 +521,6 @@ struct AppGroupMailboxTests {
     )
   }
 
-
   @Test("Hard-linked pending files count once toward capacity")
   func hardLinkedPendingCountsOnce() throws {
     let fixture = try Fixture()
@@ -543,7 +542,6 @@ struct AppGroupMailboxTests {
     }
     _ = id
   }
-
 
   @Test("Diagnostics are delivered after releasing the mailbox lock")
   func diagnosticReentrancy() throws {

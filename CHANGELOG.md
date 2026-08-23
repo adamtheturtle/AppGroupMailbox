@@ -17,6 +17,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Namespace validation rejects dot-only names such as `...` (#42).
 - Cap `maxPayloadBytes` and avoid overflow in `safeData` byte-limit math (#47, #48).
 - `MailboxError` conforms to `LocalizedError` and `Hashable` (#52, #53).
+- Claim rollback, release conflicts, and transient claim-read failures are handled without split-brain or stuck claims (#38, #39, #40).
 
 ## [0.1.1] - 2026-08-03
 

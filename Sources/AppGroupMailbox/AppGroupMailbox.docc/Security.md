@@ -5,8 +5,9 @@ Understand the mailbox's filesystem boundary and failure model.
 ## Filesystem boundary
 
 The package creates `AppGroupMailbox/<namespace>` below the caller-provided container. A namespace
-contains only ASCII letters, numbers, `.`, `_`, and `-`, and cannot be `.` or `..`. Queue discovery
-only accepts regular, non-symbolic-link files with the package's pending filename shape.
+contains only ASCII letters, numbers, `.`, `_`, and `-`, and cannot be `.`, `..`, or made only of
+dots. Queue discovery and capacity accounting only accept regular, non-symbolic-link files whose
+pending names match `pending-<20-digit-ordinal>-<uuid>.json` (lowercase `.json`).
 
 The file size is checked before reading. A payload cannot exceed
 ``AppGroupMailbox/AppGroupMailbox/Limits/maxPayloadBytes``.

@@ -456,6 +456,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         decoded = nil
       }
       let enqueuedAt = decoded?.enqueuedAt
+      if name.hasPrefix("pending-"), decoded == nil {
+        try quarantine(url)
+        emitDiagnostic(.malformedMessageQuarantined)
+        continue
+      }
       let messageAge = now.timeIntervalSince(enqueuedAt ?? modificationDate)
       if name.hasPrefix("pending-"), messageAge > limits.messageLifetime {
         if decoded == nil {

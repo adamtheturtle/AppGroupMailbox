@@ -508,6 +508,19 @@ struct AppGroupMailboxTests {
     )
   }
 
+  @Test("Ordinal parsing requires exactly 20 digits")
+  func ordinalRequiresTwentyDigits() {
+    #expect(
+      AppGroupMailbox<Message>.ordinal(from: "pending-00000000000000000001-\(UUID().uuidString).json")
+        == 1
+    )
+    #expect(AppGroupMailbox<Message>.ordinal(from: "pending-1-\(UUID().uuidString).json") == nil)
+    #expect(
+      AppGroupMailbox<Message>.ordinal(from: "pending-000000000000000000001-\(UUID().uuidString).json")
+        == nil
+    )
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

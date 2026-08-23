@@ -491,6 +491,23 @@ struct AppGroupMailboxTests {
   }
 
 
+
+  @Test("MailboxError provides localized descriptions and is Hashable")
+  func mailboxErrorProtocols() {
+    let errors: Set<AppGroupMailbox<Message>.MailboxError> = [
+      .invalidNamespace,
+      .mailboxFull,
+      .ioFailure,
+      .payloadTooLarge(actualBytes: 10, maximumBytes: 5),
+    ]
+    #expect(errors.count == 4)
+    #expect(AppGroupMailbox<Message>.MailboxError.mailboxFull.errorDescription != nil)
+    #expect(
+      AppGroupMailbox<Message>.MailboxError.invalidLimit("maxMessages").errorDescription?
+        .contains("maxMessages") == true
+    )
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

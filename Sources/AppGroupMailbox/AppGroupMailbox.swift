@@ -59,7 +59,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 
   /// Failures produced by mailbox operations. No case contains message contents.
-  public enum MailboxError: Error, Sendable, Equatable {
+  public enum MailboxError: Error, Sendable, Equatable, Hashable, LocalizedError {
     case invalidNamespace
     case invalidLimit(String)
     case containerUnavailable
@@ -71,6 +71,34 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     case ioFailure
     case encodingFailure
     case decodingFailure
+
+    public var errorDescription: String? {
+      switch self {
+      case .invalidNamespace:
+        return "The mailbox namespace is invalid."
+      case .invalidLimit(let name):
+        return "The mailbox limit '\(name)' is invalid."
+      case .containerUnavailable:
+        return "The App Group container is unavailable."
+      case .mailboxFull:
+        return "The mailbox is full."
+      case .payloadTooLarge(let actualBytes, let maximumBytes):
+        return
+          "The encoded message is \(actualBytes) bytes, which exceeds the limit of \(maximumBytes) bytes."
+      case .unsafeFile:
+        return "A mailbox file failed safety checks."
+      case .claimNoLongerExists:
+        return "The claim no longer exists."
+      case .ioFailure:
+        return "A mailbox file operation failed."
+      case .encodingFailure:
+        return "Encoding the message failed."
+      case .decodingFailure:
+        return "Decoding the message failed."
+      case .ordinalExhausted:
+        return "The mailbox ordinal space is exhausted."
+      }
+    }
   }
 
   /// An atomically claimed message. A claim remains on disk until acknowledged or released.

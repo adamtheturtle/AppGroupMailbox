@@ -521,6 +521,29 @@ struct AppGroupMailboxTests {
     )
   }
 
+
+  @Test("Hard-linked pending files count once toward capacity")
+  func hardLinkedPendingCountsOnce() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(maxMessages: 1))
+    let id = try mailbox.enqueue(Message(value: "only"))
+    let pending = try #require(
+      try FileManager.default.contentsOfDirectory(
+        at: fixture.mailboxDirectory,
+        includingPropertiesForKeys: nil
+      ).first { $0.lastPathComponent.hasPrefix("pending-") }
+    )
+    let link = fixture.mailboxDirectory.appendingPathComponent(
+      "pending-00000000000000000099-\(UUID().uuidString).json"
+    )
+    try FileManager.default.linkItem(at: pending, to: link)
+
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxFull) {
+      try mailbox.enqueue(Message(value: "extra"))
+    }
+    _ = id
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

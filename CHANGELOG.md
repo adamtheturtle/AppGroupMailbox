@@ -33,6 +33,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Quarantine malformed claimed filenames with bounded retention.
 - Require exact 20-digit ordinals and package pending shape in claim-name parsing (#64, #65).
 - Surface deletion failures during expiry cleanup and quarantine trimming (#35, #36).
+- Give multiprocess test workers an isolated namespace per run.
+- Decode only envelope timestamps when ordering pending files for claim.
+- Abandoned-claim recovery quarantines conflicting pending files and surfaces failed restore moves (#27, #28).
+- Count hard-linked pending/claimed files once toward maxMessages (#50).
 
 ## [0.1.1] - 2026-08-03
 

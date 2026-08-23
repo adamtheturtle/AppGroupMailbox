@@ -171,7 +171,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
       messageType = try container.decodeIfPresent(String.self, forKey: .messageType) ?? ""
       id = try container.decode(UUID.self, forKey: .id)
-      enqueuedAt = try container.decode(Date.self, forKey: .enqueuedAt)
+      let enqueuedAtSeconds = try container.decode(Double.self, forKey: .enqueuedAt)
+      enqueuedAt = AppGroupMailbox<Message>.decodeLegacyEnvelopeTimestamp(seconds: enqueuedAtSeconds)
       message = try container.decode(Message.self, forKey: .message)
     }
 
@@ -260,17 +261,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     self.diagnostic = diagnostic
     self.fileManager = fileManager
     encoder.dateEncodingStrategy = .secondsSince1970
-    // Accept Unix seconds (current) and legacy reference-date seconds from
-    // envelopes written before the Unix-second migration.
-    decoder.dateDecodingStrategy = .custom { try Self.decodeEnvelopeDate(from: $0) }
+    decoder.dateDecodingStrategy = .secondsSince1970
   }
 
-  private static func decodeEnvelopeDate(from decoder: Decoder) throws -> Date {
-    let container = try decoder.singleValueContainer()
-    let seconds = try container.decode(Double.self)
+  /// Interprets envelope `enqueuedAt` seconds, accepting both Unix seconds and legacy
+  /// reference-date seconds from envelopes written before the Unix-second migration.
+  static func decodeLegacyEnvelopeTimestamp(seconds: Double) -> Date {
     let unixDate = Date(timeIntervalSince1970: seconds)
-    // Legacy `.deferredToDate` values are seconds since 2001-01-01. Interpreted
-    // as Unix seconds they land before the reference date; remap those.
     if unixDate < Date(timeIntervalSinceReferenceDate: 0) {
       return Date(timeIntervalSinceReferenceDate: seconds)
     }

@@ -698,7 +698,6 @@ struct AppGroupMailboxTests {
     }
     #expect(!diagnostics.values.contains(.unclaimableFilesPresent))
   }
-
   @Test("Legacy reference-date envelopes are not treated as already expired")
   func legacyReferenceDateEnvelopesSurviveUpgrade() throws {
     let fixture = try Fixture()
@@ -844,6 +843,27 @@ struct AppGroupMailboxTests {
     #expect(diagnostics.values == [.quarantinedFileDiscarded])
     let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
     #expect(!names.contains { $0.hasPrefix("pending-") || $0.hasPrefix("quarantine-") })
+  }
+
+  @Test("Message payload dates before 2001 round-trip as Unix seconds")
+  func messageDatesBeforeReferenceDateAreNotRemapped() throws {
+    struct DatedMessage: Codable, Sendable, Equatable {
+      let value: String
+      let createdAt: Date
+    }
+
+    let fixture = try Fixture()
+    let mailbox = try AppGroupMailbox<DatedMessage>(
+      containerURL: fixture.root,
+      namespace: "tests"
+    )
+    let createdAt = Date(timeIntervalSince1970: 946_684_800 - 60)  // 1999-12-31T23:59:00Z
+    let id = try mailbox.enqueue(DatedMessage(value: "historical", createdAt: createdAt))
+
+    let claim = try #require(try mailbox.claimPending(limit: 1).first)
+    #expect(claim.id == id)
+    #expect(claim.message == DatedMessage(value: "historical", createdAt: createdAt))
+    try claim.acknowledge()
   }
 
 }

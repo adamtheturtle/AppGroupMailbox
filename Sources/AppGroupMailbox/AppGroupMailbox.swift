@@ -530,3 +530,5 @@ extension AppGroupMailbox {
     #endif
   }
 }
+
+// Lint CI verification marker

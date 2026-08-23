@@ -330,9 +330,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       try maintain(recoveredMessages: &shouldNotify)
       if try containsMessage(id: id) { return }
       var pending = try pendingEntries()
-      while try activeMessageCount() >= limits.maxMessages,
-        let malformedIndex = pending.firstIndex(where: { $0.enqueuedAt == nil })
-      {
+      while try activeMessageCount() >= limits.maxMessages {
+        guard
+          let malformedIndex = pending.firstIndex(where: { entry in
+            guard let data = try? safeData(at: entry.url) else { return true }
+            return (try? decoder.decode(Envelope.self, from: data)) == nil
+          })
+        else { break }
         let malformed = pending.remove(at: malformedIndex)
         try quarantine(malformed.url)
         emitDiagnostic(.malformedMessageQuarantined)

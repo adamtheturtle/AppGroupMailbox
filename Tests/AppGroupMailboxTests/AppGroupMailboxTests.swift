@@ -393,7 +393,8 @@ struct AppGroupMailboxTests {
       // roots already isolate runs (see #68); a UUID default per process would
       // make claims.count == 0.
       process.arguments = [
-        "enqueue", fixture.root.path, String(producer * 20), "20", "multiprocess", "MultiprocessTestMessage",
+        "enqueue", fixture.root.path, String(producer * 20), "20", "multiprocess",
+        "MultiprocessTestMessage",
       ]
       return process
     }
@@ -624,7 +625,6 @@ struct AppGroupMailboxTests {
     #expect(names.contains { $0.hasPrefix("quarantine-") && $0.contains(id.uuidString) })
   }
 
-
   @Test("Different message types cannot share a namespace")
   func messageTypeGuard() throws {
     struct OtherMessage: Codable, Sendable { let value: String }
@@ -640,7 +640,6 @@ struct AppGroupMailboxTests {
     let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
     #expect(names.contains { $0.hasPrefix("quarantine-") })
   }
-
 
   @Test("Ordinals use 21 digits once millisecond timestamps exceed 20 digits")
   func wideOrdinals() {
@@ -807,7 +806,6 @@ struct AppGroupMailboxTests {
     #expect(!names.contains { $0.hasPrefix("pending-") })
   }
 
-
   @Test("Abandoned claim recovery keeps the claim when a conflicting pending file exists")
   func abandonedClaimRecoveryPrefersClaimOverConflict() throws {
     let fixture = try Fixture()
@@ -843,7 +841,6 @@ struct AppGroupMailboxTests {
     #expect(diagnostics.values.contains(.abandonedClaimRecovered))
     #expect(diagnostics.values.contains(.unsafeFileQuarantined))
   }
-
 
   @Test("Disabled quarantine retention reports discard only after successful removal")
   func zeroQuarantineRetentionEmitsDiscarded() throws {
@@ -887,37 +884,29 @@ struct AppGroupMailboxTests {
     try claim.acknowledge()
   }
 
-  @Test("Failed discard under disabled quarantine retention emits no diagnostic")
-  func zeroQuarantineRetentionSkipsFailedRemoval() throws {
-    let fixture = try Fixture()
-    let diagnostics = DiagnosticRecorder()
-    let mailbox = try fixture.mailbox(
-      limits: .init(maxQuarantinedFiles: 0),
-      diagnostic: diagnostics.record
-    )
-    let unreadable = fixture.mailboxDirectory.appendingPathComponent(
-      "pending-00000000000000000001-\(UUID().uuidString).json"
-    )
-    try Data("not json".utf8).write(to: unreadable)
-    #if canImport(Darwin)
+  #if canImport(Darwin)
+    // Immutable-file discard failure is Darwin-specific; Linux owners can still unlink
+    // mode-000 files, so chmod-based simulation does not exercise the failure path.
+    @Test("Failed discard under disabled quarantine retention emits no diagnostic")
+    func zeroQuarantineRetentionSkipsFailedRemoval() throws {
+      let fixture = try Fixture()
+      let diagnostics = DiagnosticRecorder()
+      let mailbox = try fixture.mailbox(
+        limits: .init(maxQuarantinedFiles: 0),
+        diagnostic: diagnostics.record
+      )
+      let unreadable = fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000001-\(UUID().uuidString).json"
+      )
+      try Data("not json".utf8).write(to: unreadable)
       try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: unreadable.path)
-    #else
-      try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: unreadable.path)
-    #endif
 
-    try mailbox.performMaintenance()
+      try mailbox.performMaintenance()
 
-    #expect(diagnostics.values.isEmpty)
-    #expect(FileManager.default.fileExists(atPath: unreadable.path))
-    #if canImport(Darwin)
+      #expect(diagnostics.values.isEmpty)
+      #expect(FileManager.default.fileExists(atPath: unreadable.path))
       try FileManager.default.setAttributes([.immutable: false], ofItemAtPath: unreadable.path)
-    #else
-      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: unreadable.path)
-    #endif
-  }
+    }
+  #endif
 
 }
-
-#if false
-// debug helper - remove before commit
-#endif

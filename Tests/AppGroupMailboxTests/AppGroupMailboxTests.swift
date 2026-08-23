@@ -497,9 +497,10 @@ struct AppGroupMailboxTests {
       .invalidNamespace,
       .mailboxFull,
       .ioFailure,
+      .mailboxDeallocated,
       .payloadTooLarge(actualBytes: 10, maximumBytes: 5),
     ]
-    #expect(errors.count == 4)
+    #expect(errors.count == 5)
     #expect(AppGroupMailbox<Message>.MailboxError.mailboxFull.errorDescription != nil)
     #expect(
       AppGroupMailbox<Message>.MailboxError.invalidLimit("maxMessages").errorDescription?
@@ -698,6 +699,28 @@ struct AppGroupMailboxTests {
 
     try mailbox.performMaintenance()
     #expect(try mailbox.claimPending().map(\.message.value) == ["legacy"])
+  }
+
+  @Test("Claim operations after mailbox deallocation throw mailboxDeallocated")
+  func claimAfterMailboxDeallocation() throws {
+    let fixture = try Fixture()
+    let claim: AppGroupMailbox<Message>.Claim
+    do {
+      let mailbox = try fixture.mailbox()
+      try mailbox.enqueue(Message(value: "orphan claim"))
+      claim = try #require(try mailbox.claimPending(limit: 1).first)
+    }
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxDeallocated) {
+      try claim.acknowledge()
+    }
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxDeallocated) {
+      try claim.release()
+    }
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxDeallocated) {
+      try claim.renew()
+    }
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(names.contains { $0.hasPrefix("claimed-") })
   }
 
   @Test(

@@ -43,6 +43,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Document non-Darwin notification behavior and notify when discardOldest evicts a message.
 - Emit a diagnostic when rejectNewest fails because unclaimable files consume capacity.
 - Tag envelopes with schema version and message type to prevent cross-type namespace corruption.
+- Allocate 21-digit pending ordinals so millisecond timestamps remain encodable.
 - Abandoned-claim recovery quarantines conflicting pending files and surfaces failed restore moves (#27, #28).
 - Count hard-linked pending/claimed files once toward maxMessages (#50).
 - Remove orphan pending-/claimed- directories during maintenance (#51).

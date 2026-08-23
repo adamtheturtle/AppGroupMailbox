@@ -509,15 +509,20 @@ struct AppGroupMailboxTests {
     )
   }
 
-  @Test("Ordinal parsing requires exactly 20 digits")
-  func ordinalRequiresTwentyDigits() {
+  @Test("Ordinal parsing accepts 20 or 21 digits")
+  func ordinalWidthAccepted() {
+    let id = UUID()
     #expect(
-      AppGroupMailbox<Message>.ordinal(from: "pending-00000000000000000001-\(UUID().uuidString).json")
+      AppGroupMailbox<Message>.ordinal(from: "pending-00000000000000000001-\(id.uuidString).json")
         == 1
     )
-    #expect(AppGroupMailbox<Message>.ordinal(from: "pending-1-\(UUID().uuidString).json") == nil)
+    #expect(AppGroupMailbox<Message>.ordinal(from: "pending-1-\(id.uuidString).json") == nil)
     #expect(
-      AppGroupMailbox<Message>.ordinal(from: "pending-000000000000000000001-\(UUID().uuidString).json")
+      AppGroupMailbox<Message>.ordinal(from: "pending-000000000000000000001-\(id.uuidString).json")
+        == 1
+    )
+    #expect(
+      AppGroupMailbox<Message>.ordinal(from: "pending-0000000000000000000001-\(id.uuidString).json")
         == nil
     )
   }
@@ -616,6 +621,20 @@ struct AppGroupMailboxTests {
     #expect(try other.claimPending().isEmpty)
     let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
     #expect(names.contains { $0.hasPrefix("quarantine-") })
+  }
+
+
+  @Test("Ordinals use 21 digits once millisecond timestamps exceed 20 digits")
+  func wideOrdinals() {
+    let id = UUID()
+    let name = AppGroupMailbox<Message>.pendingFileName(
+      ordinal: 10_000_000_000_000_000_000, id: id)
+    #expect(name.hasPrefix("pending-"))
+    #expect(AppGroupMailbox<Message>.ordinal(from: name) == 10_000_000_000_000_000_000)
+    #expect(
+      AppGroupMailbox<Message>.ordinal(from: "pending-00000000000000000001-\(id.uuidString).json")
+        == 1
+    )
   }
 
   @Test(

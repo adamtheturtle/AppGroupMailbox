@@ -41,6 +41,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Use fixed-width quarantine timestamps so retention order stays chronological.
 - Encode and decode envelope dates as Unix seconds for cross-process consistency.
 - Document non-Darwin notification behavior and notify when discardOldest evicts a message.
+- Emit a diagnostic when rejectNewest fails because unclaimable files consume capacity.
 - Abandoned-claim recovery quarantines conflicting pending files and surfaces failed restore moves (#27, #28).
 - Count hard-linked pending/claimed files once toward maxMessages (#50).
 - Remove orphan pending-/claimed- directories during maintenance (#51).

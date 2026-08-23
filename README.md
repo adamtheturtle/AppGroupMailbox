@@ -36,7 +36,8 @@ let mailbox = try AppGroupMailbox<WidgetAction>(
 ```
 
 The producer writes atomically and can optionally nudge an already-running consumer with a
-payload-free Darwin notification:
+payload-free Darwin notification. The same notification is also posted when a claim is released
+back to pending and when an abandoned claim is recovered:
 
 ```swift
 try mailbox.enqueue(.selectItem(id: itemID))

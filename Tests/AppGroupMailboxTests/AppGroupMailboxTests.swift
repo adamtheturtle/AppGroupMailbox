@@ -547,6 +547,56 @@ struct AppGroupMailboxTests {
     _ = id
   }
 
+  @Test("Rejecting a full mailbox reports unclaimable capacity files")
+  func rejectNewestReportsGhostFiles() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(maxMessages: 1),
+      diagnostic: diagnostics.record
+    )
+    try mailbox.enqueue(Message(value: "real"))
+    try Data("ghost".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000099-ghost"
+      )
+    )
+
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxFull) {
+      try mailbox.enqueue(Message(value: "blocked"))
+    }
+    #expect(diagnostics.values.contains(.unclaimableFilesPresent))
+  }
+
+  @Test("unclaimableFilesPresent diagnostic is deferred and reentrancy-safe")
+  func unclaimableDiagnosticIsDeferred() throws {
+    let fixture = try Fixture()
+    final class State: @unchecked Sendable {
+      var mailbox: AppGroupMailbox<Message>?
+      var reentered = false
+    }
+    let state = State()
+    state.mailbox = try fixture.mailbox(
+      limits: .init(maxMessages: 1),
+      diagnostic: { event in
+        if event == .unclaimableFilesPresent {
+          try? state.mailbox?.performMaintenance()
+          state.reentered = true
+        }
+      }
+    )
+    try state.mailbox?.enqueue(Message(value: "real"))
+    try Data("ghost".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000001-ghost"
+      )
+    )
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxFull) {
+      try state.mailbox?.enqueue(Message(value: "extra"))
+    }
+    #expect(state.reentered)
+  }
+
   @Test("Diagnostics are delivered after releasing the mailbox lock")
   func diagnosticReentrancy() throws {
     let fixture = try Fixture()
@@ -824,3 +874,7 @@ struct AppGroupMailboxTests {
   }
 
 }
+
+#if false
+// debug helper - remove before commit
+#endif

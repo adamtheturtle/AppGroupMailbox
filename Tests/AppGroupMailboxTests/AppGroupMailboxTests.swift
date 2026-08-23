@@ -547,6 +547,27 @@ struct AppGroupMailboxTests {
     _ = id
   }
 
+  @Test("Rejecting a full mailbox reports unclaimable capacity files")
+  func rejectNewestReportsGhostFiles() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(maxMessages: 1),
+      diagnostic: diagnostics.record
+    )
+    try mailbox.enqueue(Message(value: "real"))
+    try Data("ghost".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000099-ghost"
+      )
+    )
+
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxFull) {
+      try mailbox.enqueue(Message(value: "blocked"))
+    }
+    #expect(diagnostics.values.contains(.unclaimableFilesPresent))
+  }
+
   @Test("Diagnostics are delivered after releasing the mailbox lock")
   func diagnosticReentrancy() throws {
     let fixture = try Fixture()
@@ -826,3 +847,7 @@ struct AppGroupMailboxTests {
   }
 
 }
+
+#if false
+// debug helper - remove before commit
+#endif

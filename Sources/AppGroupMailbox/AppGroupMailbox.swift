@@ -345,6 +345,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           actualBytes: data.count, maximumBytes: limits.maxPayloadBytes)
       }
 
+      let unclaimableBeforeMaintenance = try unclaimableFilesPresent()
       try maintain(recoveredMessages: &shouldNotify)
       if try containsMessage(id: id) { return }
       var pending = try pendingEntries()
@@ -363,7 +364,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       if try activeMessageCount() >= limits.maxMessages {
         switch overflowPolicy {
         case .rejectNewest:
-          if try unclaimableFilesPresent() {
+          let unclaimableNow = try unclaimableFilesPresent()
+          if unclaimableBeforeMaintenance || unclaimableNow {
             emitDiagnostic(.unclaimableFilesPresent)
           }
           throw MailboxError.mailboxFull
@@ -615,7 +617,19 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
       count += 1
     }
-    return try activeMessageCount() > pendingCount + claimedCount
+    if try activeMessageCount() > pendingCount + claimedCount {
+      return true
+    }
+    return try hasNonClaimablePendingFiles()
+  }
+
+  private func hasNonClaimablePendingFiles() throws -> Bool {
+    try contents().contains { url in
+      let name = url.lastPathComponent
+      guard name.hasPrefix("pending-"), !Self.isPendingMessageName(name) else { return false }
+      let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      return values?.isRegularFile == true && values?.isSymbolicLink != true
+    }
   }
 
   private func activeMessageCount() throws -> Int {

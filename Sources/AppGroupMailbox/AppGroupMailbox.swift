@@ -469,7 +469,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       try? fileManager.removeItem(at: url)
     }
   }
+}
 
+extension AppGroupMailbox {
   private static func isValidNamespace(_ namespace: String) -> Bool {
     guard (1...64).contains(namespace.count) else { return false }
     return namespace.utf8.allSatisfy { byte in

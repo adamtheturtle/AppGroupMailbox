@@ -467,6 +467,18 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending().map(\.message.value) == ["real"])
   }
 
+  @Test("claimPending rejects a zero limit")
+  func claimPendingRejectsZeroLimit() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    try mailbox.enqueue(Message(value: "one"))
+
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.invalidLimit("claim limit")) {
+      try mailbox.claimPending(limit: 0)
+    }
+    #expect(try mailbox.claimPending(limit: 1).map(\.message.value) == ["one"])
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root", arguments: ["", ".", "..", "../escape", "a/b"])
   func invalidNamespace(namespace: String) throws {

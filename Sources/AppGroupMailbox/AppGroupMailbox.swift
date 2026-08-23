@@ -266,7 +266,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
   /// Claims pending messages in FIFO order. Concurrent consumers cannot claim the same file.
   public func claimPending(limit: Int? = nil) throws -> [Claim] {
-    if let limit, limit < 0 { throw MailboxError.invalidLimit("claim limit") }
+    if let limit, limit <= 0 { throw MailboxError.invalidLimit("claim limit") }
     var recoveredMessages = false
     defer { if recoveredMessages { postNotification() } }
     return try withLock {

@@ -845,7 +845,7 @@ struct AppGroupMailboxTests {
   }
 
 
-  @Test("Disabled quarantine retention reports discard instead of quarantine")
+  @Test("Disabled quarantine retention reports discard only after successful removal")
   func zeroQuarantineRetentionEmitsDiscarded() throws {
     let fixture = try Fixture()
     let diagnostics = DiagnosticRecorder()
@@ -885,6 +885,35 @@ struct AppGroupMailboxTests {
     #expect(claim.id == id)
     #expect(claim.message == DatedMessage(value: "historical", createdAt: createdAt))
     try claim.acknowledge()
+  }
+
+  @Test("Failed discard under disabled quarantine retention emits no diagnostic")
+  func zeroQuarantineRetentionSkipsFailedRemoval() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(maxQuarantinedFiles: 0),
+      diagnostic: diagnostics.record
+    )
+    let unreadable = fixture.mailboxDirectory.appendingPathComponent(
+      "pending-00000000000000000001-\(UUID().uuidString).json"
+    )
+    try Data("not json".utf8).write(to: unreadable)
+    #if canImport(Darwin)
+      try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: unreadable.path)
+    #else
+      try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: unreadable.path)
+    #endif
+
+    try mailbox.performMaintenance()
+
+    #expect(diagnostics.values.isEmpty)
+    #expect(FileManager.default.fileExists(atPath: unreadable.path))
+    #if canImport(Darwin)
+      try FileManager.default.setAttributes([.immutable: false], ofItemAtPath: unreadable.path)
+    #else
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: unreadable.path)
+    #endif
   }
 
 }

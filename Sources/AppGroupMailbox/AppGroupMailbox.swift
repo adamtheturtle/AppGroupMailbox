@@ -704,8 +704,14 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   @discardableResult
   private func quarantine(_ url: URL, messageID: UUID? = nil) throws -> Bool {
     guard limits.maxQuarantinedFiles > 0 else {
-      try? fileManager.removeItem(at: url)
-      emitDiagnostic(.quarantinedFileDiscarded)
+      do {
+        try fileManager.removeItem(at: url)
+        emitDiagnostic(.quarantinedFileDiscarded)
+      } catch let error as CocoaError where error.code == .fileNoSuchFile {
+        // Already removed; no discard occurred in this call.
+      } catch {
+        // Removal failed; the unsafe file may still be present.
+      }
       return false
     }
     let idComponent =

@@ -389,7 +389,12 @@ struct AppGroupMailboxTests {
     let workers = (0..<4).map { producer in
       let process = Process()
       process.executableURL = executable
-      process.arguments = ["enqueue", fixture.root.path, String(producer * 20), "20"]
+      // Shared namespace: workers must write into the same mailbox. Unique Fixture
+      // roots already isolate runs (see #68); a UUID default per process would
+      // make claims.count == 0.
+      process.arguments = [
+        "enqueue", fixture.root.path, String(producer * 20), "20", "multiprocess",
+      ]
       return process
     }
     for worker in workers { try worker.run() }

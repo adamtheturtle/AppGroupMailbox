@@ -204,6 +204,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     self.notificationName = notificationName
     self.diagnostic = diagnostic
     self.fileManager = fileManager
+    encoder.dateEncodingStrategy = .secondsSince1970
+    decoder.dateDecodingStrategy = .secondsSince1970
   }
 
   /// Resolves an App Group container and creates a mailbox inside it.

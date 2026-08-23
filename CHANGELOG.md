@@ -32,6 +32,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Notify consumers when messages become pending again after release or recovery.
 - Quarantine malformed claimed filenames with bounded retention.
 - Require exact 20-digit ordinals and package pending shape in claim-name parsing (#64, #65).
+- Surface deletion failures during expiry cleanup and quarantine trimming (#35, #36).
 
 ## [0.1.1] - 2026-08-03
 

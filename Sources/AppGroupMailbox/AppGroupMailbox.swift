@@ -439,8 +439,12 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           try quarantine(url)
           diagnostic?(.malformedMessageQuarantined)
         } else {
-          try? fileManager.removeItem(at: url)
-          diagnostic?(.expiredMessageRemoved)
+          do {
+            try fileManager.removeItem(at: url)
+            diagnostic?(.expiredMessageRemoved)
+          } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            continue
+          }
         }
       } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
@@ -450,8 +454,12 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
             try quarantine(url)
             diagnostic?(.malformedMessageQuarantined)
           } else {
-            try? fileManager.removeItem(at: url)
-            diagnostic?(.expiredMessageRemoved)
+            do {
+              try fileManager.removeItem(at: url)
+              diagnostic?(.expiredMessageRemoved)
+            } catch let error as CocoaError where error.code == .fileNoSuchFile {
+              continue
+            }
           }
           continue
         }
@@ -557,7 +565,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       .filter { $0.lastPathComponent.hasPrefix("quarantine-") }
       .sorted { $0.lastPathComponent < $1.lastPathComponent }
     for url in quarantined.dropLast(limits.maxQuarantinedFiles) {
-      try? fileManager.removeItem(at: url)
+      do {
+        try fileManager.removeItem(at: url)
+      } catch let error as CocoaError where error.code == .fileNoSuchFile {
+        continue
+      }
     }
   }
 }

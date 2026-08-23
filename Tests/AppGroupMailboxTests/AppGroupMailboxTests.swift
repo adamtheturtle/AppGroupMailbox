@@ -813,7 +813,7 @@ struct AppGroupMailboxTests {
     let fixture = try Fixture()
     let diagnostics = DiagnosticRecorder()
     let mailbox = try fixture.mailbox(
-      limits: .init(claimTimeout: 1),
+      limits: .init(messageLifetime: 24 * 60 * 60, claimTimeout: 1),
       diagnostic: diagnostics.record
     )
     try mailbox.enqueue(Message(value: "claimed-good"))

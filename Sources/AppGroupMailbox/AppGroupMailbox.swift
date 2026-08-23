@@ -566,8 +566,16 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 
   private func unclaimableFilesPresent() throws -> Bool {
-    let claimable = try pendingEntries().count
-    return try activeMessageCount() > claimable
+    // In-flight claims are normal capacity use; only report capacity that is not
+    // explained by claimable pending files or active claimed messages.
+    let pendingCount = try pendingEntries().count
+    let claimedCount = try contents().reduce(into: 0) { count, url in
+      guard url.lastPathComponent.hasPrefix("claimed-"), Self.isActiveMessageURL(url) else {
+        return
+      }
+      count += 1
+    }
+    return try activeMessageCount() > pendingCount + claimedCount
   }
 
   private func activeMessageCount() throws -> Int {

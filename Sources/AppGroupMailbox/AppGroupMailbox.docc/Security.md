@@ -14,6 +14,10 @@ The file size is checked before reading. A payload cannot exceed
 Malformed and unsafe inputs are quarantined without exposing their bytes to diagnostics. Quarantine
 storage is bounded by ``AppGroupMailbox/AppGroupMailbox/Limits/maxQuarantinedFiles``.
 
+On iOS-family platforms, queue files use `completeFileProtectionUntilFirstUserAuthentication`.
+Mailbox operations that touch the queue can fail until the user unlocks the device once after
+reboot.
+
 ## Delivery model
 
 Enqueue writes a complete envelope atomically while holding a cross-process advisory lock. Claiming

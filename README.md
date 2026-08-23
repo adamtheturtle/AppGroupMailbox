@@ -97,6 +97,11 @@ message.
 - Quarantine storage is bounded.
 - Diagnostics describe outcomes but never contain message contents.
 
+On iOS, tvOS, watchOS, and visionOS, enqueue and dequeue write queue files with
+`completeFileProtectionUntilFirstUserAuthentication`. Until the device is unlocked once
+after boot, those operations can fail with I/O errors even though the App Group container
+is otherwise available.
+
 The App Group container is the trust boundary. Every target that uses the mailbox must have the same
 App Group entitlement.
 

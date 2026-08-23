@@ -764,4 +764,42 @@ struct AppGroupMailboxTests {
     #expect(!names.contains { $0.hasPrefix("pending-") })
   }
 
+
+  @Test("Abandoned claim recovery keeps the claim when a conflicting pending file exists")
+  func abandonedClaimRecoveryPrefersClaimOverConflict() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(claimTimeout: 1),
+      diagnostic: diagnostics.record
+    )
+    try mailbox.enqueue(Message(value: "claimed-good"))
+    _ = try #require(try mailbox.claimPending(limit: 1).first)
+    let claimedURL = try #require(try fixture.claimedURL())
+    let originalName = try #require(
+      AppGroupMailbox<Message>.originalName(fromClaimName: claimedURL.lastPathComponent)
+    )
+    let conflictPayload: [String: Any] = [
+      "schemaVersion": 1,
+      "messageType": String(reflecting: Message.self),
+      "id": UUID().uuidString,
+      "enqueuedAt": Date().timeIntervalSince1970,
+      "message": ["value": "conflict"],
+    ]
+    try JSONSerialization.data(withJSONObject: conflictPayload).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(originalName)
+    )
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: -2)],
+      ofItemAtPath: claimedURL.path
+    )
+
+    try mailbox.performMaintenance()
+
+    #expect(try mailbox.claimPending().map(\.message.value) == ["claimed-good"])
+    #expect(diagnostics.values.contains(.abandonedClaimRecovered))
+    #expect(diagnostics.values.contains(.unsafeFileQuarantined))
+  }
+
+
 }

@@ -385,11 +385,12 @@ struct AppGroupMailboxTests {
   @Test("Separate producer processes do not overwrite messages")
   func multiprocessProducers() throws {
     let fixture = try Fixture()
+    let namespace = "multiprocess-\(UUID().uuidString)"
     let executable = try #require(mailboxTestWorkerURL)
     let workers = (0..<4).map { producer in
       let process = Process()
       process.executableURL = executable
-      process.arguments = ["enqueue", fixture.root.path, String(producer * 20), "20"]
+      process.arguments = ["enqueue", fixture.root.path, String(producer * 20), "20", namespace]
       return process
     }
     for worker in workers { try worker.run() }
@@ -400,7 +401,7 @@ struct AppGroupMailboxTests {
 
     let mailbox = try AppGroupMailbox<Message>(
       containerURL: fixture.root,
-      namespace: "multiprocess",
+      namespace: namespace,
       limits: .init(maxMessages: 200)
     )
     let claims = try mailbox.claimPending()

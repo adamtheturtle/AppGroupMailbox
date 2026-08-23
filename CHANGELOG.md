@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- Only report orphan directory cleanup when removal succeeds (#112).
 - Throw mailboxDeallocated when claim operations run after the mailbox is released (#110).
 - Map Claim.renew() filesystem failures to MailboxError.ioFailure (#109).
 - Quarantine pending files with undecodable messages before overflow handling (#117).

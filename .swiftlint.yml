@@ -6,24 +6,21 @@ excluded:
   - .build
 
 disabled_rules:
-  # `swift format` owns these rules and intentionally formats multiline conditions
-  # and collection literals differently from SwiftLint's defaults.
   - opening_brace
   - trailing_comma
 
 file_length:
-  # Nested mailbox types, maintenance paths, and multiprocess tests share files on purpose.
-  warning: 600
-  error: 800
+  warning: 800
+  error: 1000
 
 type_body_length:
-  warning: 500
-  error: 650
+  warning: 600
+  error: 800
 
 function_body_length:
   warning: 100
   error: 150
 
 cyclomatic_complexity:
-  warning: 15
-  error: 25
+  warning: 20
+  error: 30

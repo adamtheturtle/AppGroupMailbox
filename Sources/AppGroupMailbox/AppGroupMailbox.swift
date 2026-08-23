@@ -410,8 +410,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     if !acknowledge { postNotification() }
   }
 
-  // swiftlint:disable:next cyclomatic_complexity
-  fileprivate func renewClaim(at url: URL) throws {
+    fileprivate func renewClaim(at url: URL) throws {
     try withLock {
       guard fileManager.fileExists(atPath: url.path) else { throw MailboxError.claimNoLongerExists }
       try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
@@ -565,7 +564,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       #endif
     }
   }
-
 
   private func containsMessage(id: UUID) throws -> Bool {
     for url in try contents() {

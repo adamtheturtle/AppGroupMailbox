@@ -590,7 +590,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       ?? Self.messageID(fromFileName: url.lastPathComponent)?.uuidString
       ?? UUID().uuidString
     let destination = directory.appendingPathComponent(
-      "quarantine-\(UInt64(Date().timeIntervalSince1970 * 1_000))-\(idComponent).bin",
+      String(
+        format: "quarantine-%020llu-%@.bin",
+        UInt64(Date().timeIntervalSince1970 * 1_000),
+        idComponent
+      ),
       isDirectory: false
     )
     do {
@@ -620,7 +624,10 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   private func trimQuarantine() throws {
     let quarantined = try contents()
       .filter { $0.lastPathComponent.hasPrefix("quarantine-") }
-      .sorted { $0.lastPathComponent < $1.lastPathComponent }
+      .sorted {
+        Self.quarantineTimestamp(from: $0.lastPathComponent)
+          < Self.quarantineTimestamp(from: $1.lastPathComponent)
+      }
     for url in quarantined.dropLast(limits.maxQuarantinedFiles) {
       do {
         try fileManager.removeItem(at: url)
@@ -632,6 +639,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 }
 
 extension AppGroupMailbox {
+  static func quarantineTimestamp(from name: String) -> UInt64 {
+    guard name.hasPrefix("quarantine-") else { return 0 }
+    let remainder = name.dropFirst("quarantine-".count)
+    let digits = remainder.prefix(while: \Character.isNumber)
+    return UInt64(digits) ?? 0
+  }
+
   private static func isValidNamespace(_ namespace: String) -> Bool {
     guard (1...64).contains(namespace.count) else { return false }
     guard

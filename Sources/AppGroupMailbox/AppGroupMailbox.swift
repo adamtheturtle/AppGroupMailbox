@@ -513,37 +513,26 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
       let modificationDate = values?.contentModificationDate ?? now
       let claimAge = now.timeIntervalSince(modificationDate)
-      let decoded: Envelope?
-      do {
-        decoded = try decoder.decode(Envelope.self, from: safeData(at: url))
-      } catch {
-        decoded = nil
-      }
-      let enqueuedAt = decoded?.enqueuedAt
-      if name.hasPrefix("pending-"), decoded == nil {
+      let enqueuedAt = enqueuedAt(from: url)
+      if name.hasPrefix("pending-"), enqueuedAt == nil {
         try quarantine(url)
         emitDiagnostic(.malformedMessageQuarantined)
         continue
       }
       let messageAge = now.timeIntervalSince(enqueuedAt ?? modificationDate)
       if name.hasPrefix("pending-"), messageAge > limits.messageLifetime {
-        if decoded == nil {
-          try quarantine(url)
-          emitDiagnostic(.malformedMessageQuarantined)
-        } else {
-          do {
-            try fileManager.removeItem(at: url)
-            emitDiagnostic(.expiredMessageRemoved)
-            recoveredMessages = true
-          } catch let error as CocoaError where error.code == .fileNoSuchFile {
-            continue
-          }
+        do {
+          try fileManager.removeItem(at: url)
+          emitDiagnostic(.expiredMessageRemoved)
+          recoveredMessages = true
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+          continue
         }
       } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
       {
         if messageAge > limits.messageLifetime {
-          if decoded == nil {
+          if enqueuedAt == nil {
             try quarantine(url)
             emitDiagnostic(.malformedMessageQuarantined)
           } else {

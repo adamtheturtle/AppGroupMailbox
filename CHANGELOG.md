@@ -16,6 +16,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `claimPending(limit:)` rejects zero as an invalid limit (#32).
 - Namespace validation rejects dot-only names such as `...` (#42).
 - Cap `maxPayloadBytes` and avoid overflow in `safeData` byte-limit math (#47, #48).
+- `MailboxError` conforms to `LocalizedError` and `Hashable` (#52, #53).
 
 ## [0.1.1] - 2026-08-03
 

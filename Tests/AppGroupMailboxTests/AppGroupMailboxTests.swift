@@ -430,6 +430,23 @@ struct AppGroupMailboxTests {
     #expect(names.count(where: { $0.contains(id.uuidString) }) == 1)
   }
 
+  @Test("MailboxError provides localized descriptions and is Hashable")
+  func mailboxErrorProtocols() {
+    let errors: Set<AppGroupMailbox<Message>.MailboxError> = [
+      .invalidNamespace,
+      .mailboxFull,
+      .ioFailure,
+      .payloadTooLarge(actualBytes: 10, maximumBytes: 5),
+    ]
+    #expect(errors.count == 4)
+    #expect(AppGroupMailbox<Message>.MailboxError.mailboxFull.errorDescription != nil)
+    #expect(
+      AppGroupMailbox<Message>.MailboxError.invalidLimit("maxMessages").errorDescription?
+        .contains("maxMessages") == true
+    )
+  }
+  }
+
   @Test("Idempotent enqueue skips after a same-ID message is quarantined")
   func idempotentEnqueueAfterQuarantine() throws {
     let fixture = try Fixture()

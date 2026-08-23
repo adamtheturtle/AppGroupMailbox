@@ -544,6 +544,24 @@ struct AppGroupMailboxTests {
     _ = id
   }
 
+
+  @Test("Diagnostics are delivered after releasing the mailbox lock")
+  func diagnosticReentrancy() throws {
+    let fixture = try Fixture()
+    final class MaintenanceTrigger: @unchecked Sendable {
+      var mailbox: AppGroupMailbox<Message>?
+    }
+    let trigger = MaintenanceTrigger()
+    trigger.mailbox = try fixture.mailbox(
+      limits: .init(maxMessages: 2),
+      diagnostic: { _ in
+        try? trigger.mailbox?.performMaintenance()
+      }
+    )
+    try trigger.mailbox?.enqueue(Message(value: "first"))
+    try trigger.mailbox?.enqueue(Message(value: "second"))
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

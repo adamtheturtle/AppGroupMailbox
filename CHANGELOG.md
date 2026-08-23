@@ -35,6 +35,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Surface deletion failures during expiry cleanup and quarantine trimming (#35, #36).
 - Give multiprocess test workers an isolated namespace per run.
 - Decode only envelope timestamps when ordering pending files for claim.
+- Defer diagnostic callbacks until after the mailbox lock is released.
 - Abandoned-claim recovery quarantines conflicting pending files and surfaces failed restore moves (#27, #28).
 - Count hard-linked pending/claimed files once toward maxMessages (#50).
 - Remove orphan pending-/claimed- directories during maintenance (#51).

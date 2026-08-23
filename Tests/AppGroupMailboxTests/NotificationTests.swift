@@ -90,14 +90,7 @@
       let directory = fixture.mailboxDirectory
       let mailbox = try fixture.mailbox(
         limits: .init(claimTimeout: 1),
-        notificationName: recorder.name,
-        diagnostic: { diagnostic in
-          guard diagnostic == .abandonedClaimRecovered else { return }
-          try? FileManager.default.setAttributes(
-            [.posixPermissions: 0],
-            ofItemAtPath: directory.path
-          )
-        }
+        notificationName: recorder.name
       )
       try mailbox.enqueue(.init(value: "recover"))
       _ = try #require(try mailbox.claimPending(limit: 1).first)
@@ -108,6 +101,11 @@
       )
       let baseline = recorder.count
 
+      try mailbox.performMaintenance()
+      try FileManager.default.setAttributes(
+        [.posixPermissions: 0],
+        ofItemAtPath: directory.path
+      )
       #expect(throws: AppGroupMailbox<AppGroupMailboxTests.Message>.MailboxError.ioFailure) {
         try mailbox.performMaintenance()
       }

@@ -7,9 +7,9 @@ extension AppGroupMailbox {
       .compactMap { url in
         let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values?.isRegularFile == true, values?.isSymbolicLink != true else { return nil }
-        let envelope: Envelope?
+        let envelope: EnvelopeTimestamp?
         if let data = try? safeData(at: url) {
-          envelope = try? decoder.decode(Envelope.self, from: data)
+          envelope = try? decoder.decode(EnvelopeTimestamp.self, from: data)
         } else {
           envelope = nil
         }

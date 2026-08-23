@@ -256,7 +256,21 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     self.diagnostic = diagnostic
     self.fileManager = fileManager
     encoder.dateEncodingStrategy = .secondsSince1970
-    decoder.dateDecodingStrategy = .secondsSince1970
+    // Accept Unix seconds (current) and legacy reference-date seconds from
+    // envelopes written before the Unix-second migration.
+    decoder.dateDecodingStrategy = .custom { try Self.decodeEnvelopeDate(from: $0) }
+  }
+
+  private static func decodeEnvelopeDate(from decoder: Decoder) throws -> Date {
+    let container = try decoder.singleValueContainer()
+    let seconds = try container.decode(Double.self)
+    let unixDate = Date(timeIntervalSince1970: seconds)
+    // Legacy `.deferredToDate` values are seconds since 2001-01-01. Interpreted
+    // as Unix seconds they land before the reference date; remap those.
+    if unixDate < Date(timeIntervalSinceReferenceDate: 0) {
+      return Date(timeIntervalSinceReferenceDate: seconds)
+    }
+    return unixDate
   }
 
   /// Resolves an App Group container and creates a mailbox inside it.

@@ -455,7 +455,19 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
   private func activeMessageCount() throws -> Int {
     try contents().count { url in
+<<<<<<< HEAD
       Self.isActiveMessageURL(url)
+=======
+      let name = url.lastPathComponent
+      guard name.hasPrefix("pending-") || name.hasPrefix("claimed-") else { return false }
+      do {
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        return values.isRegularFile == true && values.isSymbolicLink != true
+      } catch {
+        // Fail closed: treat unreadable entries as active so capacity cannot be bypassed.
+        return true
+      }
+>>>>>>> a647fbf (Fail closed in activeMessageCount when resourceValues fails.)
     }
   }
 

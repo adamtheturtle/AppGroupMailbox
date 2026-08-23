@@ -68,6 +68,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     case payloadTooLarge(actualBytes: Int, maximumBytes: Int)
     case unsafeFile
     case claimNoLongerExists
+    case mailboxDeallocated
     case ordinalExhausted
     case ioFailure
     case encodingFailure
@@ -90,6 +91,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         return "A mailbox file failed safety checks."
       case .claimNoLongerExists:
         return "The claim no longer exists."
+      case .mailboxDeallocated:
+        return "The mailbox has been deallocated."
       case .ioFailure:
         return "A mailbox file operation failed."
       case .encodingFailure:
@@ -130,19 +133,19 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
     /// Permanently removes the claimed message.
     public func acknowledge() throws {
-      guard let mailbox else { throw MailboxError.claimNoLongerExists }
+      guard let mailbox else { throw MailboxError.mailboxDeallocated }
       try mailbox.finishClaim(at: claimedURL, originalName: originalName, acknowledge: true)
     }
 
     /// Returns the message to the pending queue at its original position.
     public func release() throws {
-      guard let mailbox else { throw MailboxError.claimNoLongerExists }
+      guard let mailbox else { throw MailboxError.mailboxDeallocated }
       try mailbox.finishClaim(at: claimedURL, originalName: originalName, acknowledge: false)
     }
 
     /// Extends the claim lease so abandoned-claim recovery waits another ``Limits/claimTimeout``.
     public func renew() throws {
-      guard let mailbox else { throw MailboxError.claimNoLongerExists }
+      guard let mailbox else { throw MailboxError.mailboxDeallocated }
       try mailbox.renewClaim(at: claimedURL)
     }
   }

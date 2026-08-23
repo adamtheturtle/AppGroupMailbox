@@ -219,12 +219,17 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
   /// Creates a mailbox inside `containerURL/AppGroupMailbox/<namespace>`.
   ///
+  /// - Parameter containerURL: Root App Group (or other shared) container directory.
+  /// - Parameter namespace: Logical mailbox name under `AppGroupMailbox/` inside the container.
+  /// - Parameter limits: Size and retention limits for pending envelopes.
+  /// - Parameter overflowPolicy: Behavior when enqueue would exceed configured limits.
   /// - Parameter notificationName: On Darwin platforms, posts a payload-free Darwin notification
   ///   after enqueueing and when messages become pending again. On other platforms this parameter
   ///   is accepted for API compatibility but notifications are not delivered.
   /// - Parameter messageType: An optional stable tag stored in each envelope so different
   ///   generic specializations cannot corrupt a shared namespace. Defaults to the reflected
   ///   `Message` type name.
+  /// - Parameter diagnostic: Optional callback for non-fatal diagnostic events.
   public init(
     containerURL: URL,
     namespace: String,
@@ -276,6 +281,18 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 
   /// Resolves an App Group container and creates a mailbox inside it.
+  ///
+  /// - Parameter appGroupIdentifier: App Group identifier passed to `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`.
+  /// - Parameter namespace: Logical mailbox name under `AppGroupMailbox/` inside the container.
+  /// - Parameter limits: Size and retention limits for pending envelopes.
+  /// - Parameter overflowPolicy: Behavior when enqueue would exceed configured limits.
+  /// - Parameter notificationName: On Darwin platforms, posts a payload-free Darwin notification
+  ///   after enqueueing and when messages become pending again. On other platforms this parameter
+  ///   is accepted for API compatibility but notifications are not delivered.
+  /// - Parameter messageType: An optional stable tag stored in each envelope so different
+  ///   generic specializations cannot corrupt a shared namespace. Defaults to the reflected
+  ///   `Message` type name.
+  /// - Parameter diagnostic: Optional callback for non-fatal diagnostic events.
   public convenience init(
     appGroupIdentifier: String,
     namespace: String,

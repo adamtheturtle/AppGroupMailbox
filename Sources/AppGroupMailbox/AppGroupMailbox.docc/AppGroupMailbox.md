@@ -30,8 +30,8 @@ and namespaces that could alter a path. Diagnostics never contain message conten
 
 ### Creating a mailbox
 
-- ``AppGroupMailbox/init(containerURL:namespace:limits:overflowPolicy:notificationName:diagnostic:)``
-- ``AppGroupMailbox/init(appGroupIdentifier:namespace:limits:overflowPolicy:notificationName:diagnostic:)``
+- ``AppGroupMailbox/init(containerURL:namespace:limits:overflowPolicy:notificationName:messageType:diagnostic:)``
+- ``AppGroupMailbox/init(appGroupIdentifier:namespace:limits:overflowPolicy:notificationName:messageType:diagnostic:)``
 - ``AppGroupMailbox/Limits``
 - ``AppGroupMailbox/OverflowPolicy``
 

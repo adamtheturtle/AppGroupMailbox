@@ -385,12 +385,11 @@ struct AppGroupMailboxTests {
   @Test("Separate producer processes do not overwrite messages")
   func multiprocessProducers() throws {
     let fixture = try Fixture()
-    let namespace = "multiprocess-\(UUID().uuidString)"
     let executable = try #require(mailboxTestWorkerURL)
     let workers = (0..<4).map { producer in
       let process = Process()
       process.executableURL = executable
-      process.arguments = ["enqueue", fixture.root.path, String(producer * 20), "20", namespace]
+      process.arguments = ["enqueue", fixture.root.path, String(producer * 20), "20"]
       return process
     }
     for worker in workers { try worker.run() }
@@ -401,7 +400,7 @@ struct AppGroupMailboxTests {
 
     let mailbox = try AppGroupMailbox<Message>(
       containerURL: fixture.root,
-      namespace: namespace,
+      namespace: "multiprocess",
       limits: .init(maxMessages: 200)
     )
     let claims = try mailbox.claimPending()
@@ -409,22 +408,41 @@ struct AppGroupMailboxTests {
     #expect(Set(claims.map(\.message.value)).count == 80)
   }
 
-  @Test("Quarantine disabled emits a diagnostic when discarding unsafe input")
-  func quarantineDisabledDiagnostic() throws {
+  @Test("Idempotent enqueue skips when a same-ID file is malformed")
+  func idempotentEnqueueWithMalformedSameID() throws {
     let fixture = try Fixture()
-    let diagnostics = DiagnosticRecorder()
-    let mailbox = try fixture.mailbox(
-      limits: .init(maxQuarantinedFiles: 0),
-      diagnostic: diagnostics.record
-    )
+    let mailbox = try fixture.mailbox()
+    let id = UUID()
     try Data("not json".utf8).write(
       to: fixture.mailboxDirectory.appendingPathComponent(
-        "pending-00000000000000000001-bad.json"
+        "pending-00000000000000000001-\(id.uuidString).json"
       )
     )
 
+    try mailbox.enqueue(Message(value: "retry"), id: id)
+
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.mailboxDirectory.path)
+    #expect(names.count(where: { $0.contains(id.uuidString) }) == 1)
+  }
+
+  @Test("Idempotent enqueue skips after a same-ID message is quarantined")
+  func idempotentEnqueueAfterQuarantine() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    let id = UUID()
+    try Data("not json".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000001-\(id.uuidString).json"
+      )
+    )
     #expect(try mailbox.claimPending().isEmpty)
-    #expect(diagnostics.values.contains(.quarantinedFileDiscarded))
+    let quarantined = try FileManager.default.contentsOfDirectory(
+      atPath: fixture.mailboxDirectory.path
+    )
+    #expect(quarantined.contains { $0.hasPrefix("quarantine-") && $0.contains(id.uuidString) })
+
+    try mailbox.enqueue(Message(value: "retry"), id: id)
+    #expect(try mailbox.claimPending().isEmpty)
   }
 
   @Test(

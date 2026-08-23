@@ -52,7 +52,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     case unsafeFileQuarantined
     case malformedMessageQuarantined
     case oldestMessageDiscarded
-    case quarantinedFileDiscarded
   }
 
   /// Failures produced by mailbox operations. No case contains message contents.
@@ -259,9 +258,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       } catch {
         throw MailboxError.ioFailure
       }
-      shouldNotify = true
     }
 
+    shouldNotify = true
     return id
   }
 
@@ -380,12 +379,21 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
       {
-        try recoverAbandonedClaim(
-          at: url,
-          original: original,
-          messageAge: messageAge,
-          recoveredMessages: &recoveredMessages
-        )
+        if messageAge > limits.messageLifetime {
+          try? fileManager.removeItem(at: url)
+          diagnostic?(.expiredMessageRemoved)
+          continue
+        }
+        let destination = directory.appendingPathComponent(original, isDirectory: false)
+        if !fileManager.fileExists(atPath: destination.path) {
+          if (try? fileManager.moveItem(at: url, to: destination)) != nil {
+            recoveredMessages = true
+            diagnostic?(.abandonedClaimRecovered)
+          }
+        } else {
+          try quarantine(url)
+          diagnostic?(.unsafeFileQuarantined)
+        }
       }
     }
     try trimQuarantine()
@@ -404,6 +412,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   private func containsMessage(id: UUID) throws -> Bool {
     for url in try contents() {
       let name = url.lastPathComponent
+      if let fileID = Self.messageID(fromFileName: name), fileID == id {
+        return true
+      }
       guard name.hasPrefix("pending-") || name.hasPrefix("claimed-") else { continue }
       guard let data = try? safeData(at: url),
         let envelope = try? decoder.decode(Envelope.self, from: data)
@@ -411,6 +422,29 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       if envelope.id == id { return true }
     }
     return false
+  }
+
+  private func quarantine(_ url: URL, messageID: UUID? = nil) throws {
+    guard limits.maxQuarantinedFiles > 0 else {
+      try? fileManager.removeItem(at: url)
+      return
+    }
+    let idComponent =
+      messageID?.uuidString
+      ?? Self.messageID(fromFileName: url.lastPathComponent)?.uuidString
+      ?? UUID().uuidString
+    let destination = directory.appendingPathComponent(
+      "quarantine-\(UInt64(Date().timeIntervalSince1970 * 1_000))-\(idComponent).bin",
+      isDirectory: false
+    )
+    do {
+      try fileManager.moveItem(at: url, to: destination)
+    } catch let error as CocoaError where error.code == .fileNoSuchFile {
+      return
+    } catch {
+      throw MailboxError.ioFailure
+    }
+    try trimQuarantine()
   }
 
   func contents() throws -> [URL] {
@@ -427,30 +461,6 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     }
   }
 
-  private func quarantine(_ url: URL) throws {
-    guard limits.maxQuarantinedFiles > 0 else {
-      try? fileManager.removeItem(at: url)
-      diagnostic?(.quarantinedFileDiscarded)
-      return
-    }
-    let destination = directory.appendingPathComponent(
-      String(
-        format: "quarantine-%020llu-%@.bin",
-        UInt64(Date().timeIntervalSince1970 * 1_000),
-        UUID().uuidString
-      ),
-      isDirectory: false
-    )
-    do {
-      try fileManager.moveItem(at: url, to: destination)
-    } catch let error as CocoaError where error.code == .fileNoSuchFile {
-      return
-    } catch {
-      throw MailboxError.ioFailure
-    }
-    try trimQuarantine()
-  }
-
   private func trimQuarantine() throws {
     let quarantined = try contents()
       .filter { $0.lastPathComponent.hasPrefix("quarantine-") }
@@ -459,13 +469,37 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       try? fileManager.removeItem(at: url)
     }
   }
+}
 
+extension AppGroupMailbox {
   private static func isValidNamespace(_ namespace: String) -> Bool {
     guard (1...64).contains(namespace.count) else { return false }
     return namespace.utf8.allSatisfy { byte in
       (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
         || byte == 45 || byte == 95 || byte == 46
     } && namespace != "." && namespace != ".."
+  }
+
+  /// Extracts a message UUID embedded in pending-, claimed-, or quarantine- filenames.
+  static func messageID(fromFileName name: String) -> UUID? {
+    if name.hasPrefix("pending-") {
+      let remainder = name.dropFirst("pending-".count)
+      let afterOrdinal = remainder.drop(while: { $0.isNumber }).drop(while: { $0 == "-" })
+      let uuidPart = afterOrdinal.prefix(36)
+      return UUID(uuidString: String(uuidPart))
+    }
+    if name.hasPrefix("claimed-"), let original = originalName(fromClaimName: name) {
+      return messageID(fromFileName: original)
+    }
+    if name.hasPrefix("quarantine-") {
+      // quarantine-<millis>-<uuid>.bin
+      let parts = name.split(separator: "-")
+      guard parts.count >= 3 else { return nil }
+      let uuidPart = parts.dropFirst(2).joined(separator: "-").replacingOccurrences(
+        of: ".bin", with: "")
+      return UUID(uuidString: uuidPart)
+    }
+    return nil
   }
 
   static func ordinal(from name: String) -> UInt64? {
@@ -497,37 +531,4 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 }
 
-extension AppGroupMailbox {
-  fileprivate func recoverAbandonedClaim(
-    at url: URL,
-    original: String,
-    messageAge: TimeInterval,
-    recoveredMessages: inout Bool
-  ) throws {
-    if messageAge > limits.messageLifetime {
-      try? fileManager.removeItem(at: url)
-      diagnostic?(.expiredMessageRemoved)
-      return
-    }
-    let destination = directory.appendingPathComponent(original, isDirectory: false)
-    if fileManager.fileExists(atPath: destination.path) {
-      // Conflicting pending blocks recovery; quarantine the conflict and retry restore.
-      do {
-        try quarantine(destination)
-        diagnostic?(.unsafeFileQuarantined)
-      } catch {
-        try quarantine(url)
-        diagnostic?(.unsafeFileQuarantined)
-        return
-      }
-    }
-    do {
-      try fileManager.moveItem(at: url, to: destination)
-      recoveredMessages = true
-      diagnostic?(.abandonedClaimRecovered)
-    } catch {
-      try quarantine(url)
-      diagnostic?(.unsafeFileQuarantined)
-    }
-  }
-}
+// Lint CI verification marker

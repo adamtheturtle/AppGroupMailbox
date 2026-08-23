@@ -676,6 +676,30 @@ struct AppGroupMailboxTests {
     #expect(!diagnostics.values.contains(.unclaimableFilesPresent))
   }
 
+  @Test("Legacy reference-date envelopes are not treated as already expired")
+  func legacyReferenceDateEnvelopesSurviveUpgrade() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(messageLifetime: 60))
+    let id = UUID()
+    let enqueuedAt = Date()
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "messageType": String(reflecting: Message.self),
+      "id": id.uuidString,
+      "enqueuedAt": enqueuedAt.timeIntervalSinceReferenceDate,
+      "message": ["value": "legacy"],
+    ]
+    let data = try JSONSerialization.data(withJSONObject: payload)
+    try data.write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        AppGroupMailbox<Message>.pendingFileName(ordinal: 1, id: id)
+      )
+    )
+
+    try mailbox.performMaintenance()
+    #expect(try mailbox.claimPending().map(\.message.value) == ["legacy"])
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

@@ -600,7 +600,13 @@ extension AppGroupMailbox {
 
   static func ordinal(from name: String) -> UInt64? {
     guard name.hasPrefix("pending-") else { return nil }
-    return UInt64(name.dropFirst("pending-".count).prefix(while: \Character.isNumber))
+    let remainder = name.dropFirst("pending-".count)
+    let digits = remainder.prefix(while: \Character.isNumber)
+    guard digits.count == 20,
+      remainder.dropFirst(20).first == "-",
+      let value = UInt64(digits)
+    else { return nil }
+    return value
   }
 
   static func originalName(fromClaimName name: String) -> String? {
@@ -611,11 +617,26 @@ extension AppGroupMailbox {
       remainder.dropFirst(36).first == "-"
     else { return nil }
     let original = String(remainder.dropFirst(37))
-    guard original.hasPrefix("pending-"), original.hasSuffix(".json"), !original.contains("/")
+    guard original.hasPrefix("pending-"),
+      original.hasSuffix(".json"),
+      !original.contains("/"),
+      ordinal(from: original) != nil,
+      messageID(fromPendingName: original) != nil
     else {
       return nil
     }
     return original
+  }
+
+  /// Extracts the message UUID from a package-written `pending-<20 digits>-<uuid>.json` name.
+  static func messageID(fromPendingName name: String) -> UUID? {
+    guard name.hasPrefix("pending-"), name.hasSuffix(".json") else { return nil }
+    let body = name.dropFirst("pending-".count).dropLast(".json".count)
+    guard body.count == 20 + 1 + 36,
+      ordinal(from: name) != nil,
+      body.dropFirst(20).first == "-"
+    else { return nil }
+    return UUID(uuidString: String(body.suffix(36)))
   }
 
   private var writeOptions: Data.WritingOptions {

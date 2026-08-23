@@ -479,9 +479,19 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 
   private func activeMessageCount() throws -> Int {
-    try contents().count { url in
-      Self.isActiveMessageURL(url)
+    var seen: Set<FileIdentity> = []
+    var count = 0
+    for url in try contents() {
+      guard Self.isActiveMessageURL(url) else { continue }
+      if let identity = FileIdentity(url: url) {
+        if seen.insert(identity).inserted {
+          count += 1
+        }
+      } else {
+        count += 1
+      }
     }
+    return count
   }
 
   /// Pending and claimed regular files that count toward capacity and can participate
@@ -507,6 +517,23 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       return true
     }
   }
+
+  private struct FileIdentity: Hashable {
+    let device: Int
+    let inode: Int
+
+    init?(url: URL) {
+      #if canImport(Darwin)
+        var status = stat()
+        guard lstat(url.path, &status) == 0 else { return nil }
+        self.device = Int(status.st_dev)
+        self.inode = Int(status.st_ino)
+      #else
+        return nil
+      #endif
+    }
+  }
+
 
   private func containsMessage(id: UUID) throws -> Bool {
     for url in try contents() {

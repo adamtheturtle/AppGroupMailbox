@@ -27,7 +27,7 @@ var mailboxTestWorkerURL: URL? {
 func setEnqueuedAt(_ date: Date, in url: URL) throws {
   let data = try Data(contentsOf: url)
   var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-  object["enqueuedAt"] = date.timeIntervalSinceReferenceDate
+  object["enqueuedAt"] = date.timeIntervalSince1970
   try JSONSerialization.data(withJSONObject: object).write(to: url)
 }
 

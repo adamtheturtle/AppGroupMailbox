@@ -172,7 +172,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       messageType = try container.decodeIfPresent(String.self, forKey: .messageType) ?? ""
       id = try container.decode(UUID.self, forKey: .id)
       let enqueuedAtSeconds = try container.decode(Double.self, forKey: .enqueuedAt)
-      enqueuedAt = AppGroupMailbox<Message>.decodeLegacyEnvelopeTimestamp(seconds: enqueuedAtSeconds)
+      enqueuedAt = AppGroupMailbox<Message>.decodeLegacyEnvelopeTimestamp(
+        seconds: enqueuedAtSeconds)
       message = try container.decode(Message.self, forKey: .message)
     }
 

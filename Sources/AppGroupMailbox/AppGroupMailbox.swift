@@ -455,19 +455,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
   private func activeMessageCount() throws -> Int {
     try contents().count { url in
-<<<<<<< HEAD
       Self.isActiveMessageURL(url)
-=======
-      let name = url.lastPathComponent
-      guard name.hasPrefix("pending-") || name.hasPrefix("claimed-") else { return false }
-      do {
-        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        return values.isRegularFile == true && values.isSymbolicLink != true
-      } catch {
-        // Fail closed: treat unreadable entries as active so capacity cannot be bypassed.
-        return true
-      }
->>>>>>> a647fbf (Fail closed in activeMessageCount when resourceValues fails.)
     }
   }
 
@@ -486,8 +474,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   static func isActiveMessageURL(_ url: URL) -> Bool {
     let name = url.lastPathComponent
     guard isActiveMessageName(name) else { return false }
-    let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-    return values?.isRegularFile == true && values?.isSymbolicLink != true
+    do {
+      let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      return values.isRegularFile == true && values.isSymbolicLink != true
+    } catch {
+      // Fail closed: treat unreadable entries as active so capacity cannot be bypassed.
+      return true
+    }
   }
 
   private func containsMessage(id: UUID) throws -> Bool {

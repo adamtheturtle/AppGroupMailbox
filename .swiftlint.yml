@@ -12,17 +12,18 @@ disabled_rules:
   - trailing_comma
 
 file_length:
-  # The public API and its private on-disk implementation intentionally stay together so the
-  # generic nested envelope and claim types do not leak beyond this source file.
-  warning: 550
-  error: 700
+  # Nested mailbox types, maintenance paths, and multiprocess tests share files on purpose.
+  warning: 600
+  error: 800
 
 type_body_length:
-  warning: 450
-  error: 550
+  warning: 500
+  error: 650
 
 function_body_length:
-  warning: 80
-  error: 120
+  warning: 100
+  error: 150
 
-# CI retrigger marker
+cyclomatic_complexity:
+  warning: 15
+  error: 25

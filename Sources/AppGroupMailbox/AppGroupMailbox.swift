@@ -257,9 +257,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       } catch {
         throw MailboxError.ioFailure
       }
+      shouldNotify = true
     }
 
-    shouldNotify = true
     return id
   }
 

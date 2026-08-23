@@ -722,6 +722,27 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending().map(\.message.value) == ["legacy"])
   }
 
+  @Test("Legacy reference-date envelopes are readable when claiming")
+  func legacyReferenceDateEnvelopesSurviveClaim() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox()
+    let id = UUID()
+    let payload: [String: Any] = [
+      "schemaVersion": 1,
+      "messageType": String(reflecting: Message.self),
+      "id": id.uuidString,
+      "enqueuedAt": Date().timeIntervalSinceReferenceDate,
+      "message": ["value": "legacy-claim"],
+    ]
+    try JSONSerialization.data(withJSONObject: payload).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        AppGroupMailbox<Message>.pendingFileName(ordinal: 1, id: id)
+      )
+    )
+
+    #expect(try mailbox.claimPending().map(\.message.value) == ["legacy-claim"])
+  }
+
   @Test("Claim operations after mailbox deallocation throw mailboxDeallocated")
   func claimAfterMailboxDeallocation() throws {
     let fixture = try Fixture()

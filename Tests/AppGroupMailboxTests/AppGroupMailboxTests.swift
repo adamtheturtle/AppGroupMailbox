@@ -490,8 +490,6 @@ struct AppGroupMailboxTests {
     }
   }
 
-
-
   @Test("MailboxError provides localized descriptions and is Hashable")
   func mailboxErrorProtocols() {
     let errors: Set<AppGroupMailbox<Message>.MailboxError> = [

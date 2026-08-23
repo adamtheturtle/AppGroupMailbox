@@ -491,10 +491,14 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     if !acknowledge { postNotification() }
   }
 
-    fileprivate func renewClaim(at url: URL) throws {
+  fileprivate func renewClaim(at url: URL) throws {
     try withLock {
       guard fileManager.fileExists(atPath: url.path) else { throw MailboxError.claimNoLongerExists }
-      try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+      do {
+        try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+      } catch {
+        throw MailboxError.ioFailure
+      }
     }
   }
 

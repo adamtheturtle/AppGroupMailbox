@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- Map Claim.renew() filesystem failures to MailboxError.ioFailure (#109).
 - Quarantine pending files with undecodable messages before overflow handling (#117).
 - Ignore in-flight claims when reporting unclaimable capacity on rejectNewest (#105).
 - Defer unclaimableFilesPresent diagnostics until after the mailbox lock is released (#106).

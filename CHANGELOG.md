@@ -9,6 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - Quarantine pending files with undecodable messages before overflow handling (#117).
+- Ignore in-flight claims when reporting unclaimable capacity on rejectNewest (#105).
 - Ordinal overflow throws `ordinalExhausted` instead of a generic I/O failure (#41).
 - Idempotent enqueue recognizes malformed and quarantined same-ID files (#21, #22).
 - Capacity counting and pending selection agree on lowercase `.json` pending names (#23, #24, #25).

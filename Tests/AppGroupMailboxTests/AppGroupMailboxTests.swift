@@ -659,6 +659,23 @@ struct AppGroupMailboxTests {
     #expect(names.contains { $0.hasPrefix("quarantine-") && $0.contains(corruptID.uuidString) })
   }
 
+  @Test("In-flight claims do not report unclaimableFilesPresent on mailboxFull")
+  func claimedCapacityDoesNotReportUnclaimable() throws {
+    let fixture = try Fixture()
+    let diagnostics = DiagnosticRecorder()
+    let mailbox = try fixture.mailbox(
+      limits: .init(maxMessages: 1),
+      diagnostic: diagnostics.record
+    )
+    try mailbox.enqueue(Message(value: "only"))
+    _ = try #require(try mailbox.claimPending(limit: 1).first)
+
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.mailboxFull) {
+      try mailbox.enqueue(Message(value: "extra"))
+    }
+    #expect(!diagnostics.values.contains(.unclaimableFilesPresent))
+  }
+
 
   @Test(
     "Namespaces cannot escape the mailbox root",

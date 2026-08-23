@@ -686,6 +686,7 @@ extension AppGroupMailbox {
       body.dropFirst(20).first == "-"
     else { return nil }
     return UUID(uuidString: String(body.suffix(36)))
+  }
 
   func beginLockedDiagnostics() {
     isLockedForDiagnostics = true

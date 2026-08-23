@@ -479,6 +479,18 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending(limit: 1).map(\.message.value) == ["one"])
   }
 
+  @Test("Extreme maxPayloadBytes values are rejected")
+  func extremePayloadLimitRejected() throws {
+    let fixture = try Fixture()
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.invalidLimit("maxPayloadBytes")) {
+      try fixture.mailbox(limits: .init(maxPayloadBytes: Int.max))
+    }
+    #expect(throws: AppGroupMailbox<Message>.MailboxError.invalidLimit("maxPayloadBytes")) {
+      try fixture.mailbox(limits: .init(maxPayloadBytes: 64 * 1024 * 1024 + 1))
+    }
+  }
+
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

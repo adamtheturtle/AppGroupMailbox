@@ -32,7 +32,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
     fileprivate func validate() throws {
       guard maxMessages > 0 else { throw MailboxError.invalidLimit("maxMessages") }
-      guard maxPayloadBytes > 0 else { throw MailboxError.invalidLimit("maxPayloadBytes") }
+      // Cap payload size so remaining+1 arithmetic in safeData cannot overflow Int,
+      // and so callers cannot request unbounded in-memory reads.
+      guard maxPayloadBytes > 0, maxPayloadBytes <= 64 * 1024 * 1024 else {
+        throw MailboxError.invalidLimit("maxPayloadBytes")
+      }
       guard messageLifetime > 0 else { throw MailboxError.invalidLimit("messageLifetime") }
       guard claimTimeout > 0 else { throw MailboxError.invalidLimit("claimTimeout") }
       guard maxQuarantinedFiles >= 0 else { throw MailboxError.invalidLimit("maxQuarantinedFiles") }

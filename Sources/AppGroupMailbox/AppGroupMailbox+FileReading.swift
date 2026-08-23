@@ -26,8 +26,11 @@ extension AppGroupMailbox {
     var buffer = [UInt8](repeating: 0, count: min(16_384, limits.maxPayloadBytes + 1))
     while true {
       let remaining = limits.maxPayloadBytes - data.count
-      let requested =
-        remaining == Int.max ? buffer.count : min(buffer.count, remaining + 1)
+      guard remaining >= 0 else { throw MailboxError.unsafeFile }
+      // Request one extra byte so an oversize payload is detected without
+      // overflowing when remaining == Int.max.
+      let extraCapacity = remaining < Int.max ? remaining + 1 : remaining
+      let requested = min(buffer.count, extraCapacity)
       let count = read(descriptor, &buffer, requested)
       if count == 0 { return data }
       if count < 0 {

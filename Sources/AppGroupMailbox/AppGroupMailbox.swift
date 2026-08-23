@@ -578,14 +578,14 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           continue
         }
         let destination = directory.appendingPathComponent(original, isDirectory: false)
-        if !fileManager.fileExists(atPath: destination.path) {
-          if (try? fileManager.moveItem(at: url, to: destination)) != nil {
-            recoveredMessages = true
-            emitDiagnostic(.abandonedClaimRecovered)
-          }
-        } else {
-          try quarantine(url)
+        if fileManager.fileExists(atPath: destination.path) {
+          // Conflicting pending file blocks restore; quarantine it so the claim can return.
+          try quarantine(destination)
           emitDiagnostic(.unsafeFileQuarantined)
+        }
+        if (try? fileManager.moveItem(at: url, to: destination)) != nil {
+          recoveredMessages = true
+          emitDiagnostic(.abandonedClaimRecovered)
         }
       }
     }

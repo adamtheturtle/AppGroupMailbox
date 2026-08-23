@@ -257,9 +257,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       } catch {
         throw MailboxError.ioFailure
       }
+      shouldNotify = true
     }
 
-    shouldNotify = true
     return id
   }
 
@@ -378,31 +378,12 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
       {
-        if messageAge > limits.messageLifetime {
-          try? fileManager.removeItem(at: url)
-          diagnostic?(.expiredMessageRemoved)
-          continue
-        }
-        let destination = directory.appendingPathComponent(original, isDirectory: false)
-        if fileManager.fileExists(atPath: destination.path) {
-          // Conflicting pending blocks recovery; quarantine the conflict and retry restore.
-          do {
-            try quarantine(destination)
-            diagnostic?(.unsafeFileQuarantined)
-          } catch {
-            try quarantine(url)
-            diagnostic?(.unsafeFileQuarantined)
-            continue
-          }
-        }
-        do {
-          try fileManager.moveItem(at: url, to: destination)
-          recoveredMessages = true
-          diagnostic?(.abandonedClaimRecovered)
-        } catch {
-          try quarantine(url)
-          diagnostic?(.unsafeFileQuarantined)
-        }
+        try recoverAbandonedClaim(
+          at: url,
+          original: original,
+          messageAge: messageAge,
+          recoveredMessages: &recoveredMessages
+        )
       }
     }
     try trimQuarantine()
@@ -506,5 +487,40 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     #else
       [.atomic]
     #endif
+  }
+}
+
+extension AppGroupMailbox {
+  fileprivate func recoverAbandonedClaim(
+    at url: URL,
+    original: String,
+    messageAge: TimeInterval,
+    recoveredMessages: inout Bool
+  ) throws {
+    if messageAge > limits.messageLifetime {
+      try? fileManager.removeItem(at: url)
+      diagnostic?(.expiredMessageRemoved)
+      return
+    }
+    let destination = directory.appendingPathComponent(original, isDirectory: false)
+    if fileManager.fileExists(atPath: destination.path) {
+      // Conflicting pending blocks recovery; quarantine the conflict and retry restore.
+      do {
+        try quarantine(destination)
+        diagnostic?(.unsafeFileQuarantined)
+      } catch {
+        try quarantine(url)
+        diagnostic?(.unsafeFileQuarantined)
+        return
+      }
+    }
+    do {
+      try fileManager.moveItem(at: url, to: destination)
+      recoveredMessages = true
+      diagnostic?(.abandonedClaimRecovered)
+    } catch {
+      try quarantine(url)
+      diagnostic?(.unsafeFileQuarantined)
+    }
   }
 }

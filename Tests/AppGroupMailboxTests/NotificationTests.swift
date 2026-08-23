@@ -6,6 +6,40 @@
 
   @Suite("Darwin notifications")
   struct NotificationTests {
+    @Test("Idempotent duplicate enqueue does not notify")
+    func idempotentEnqueueDoesNotNotify() async throws {
+      let fixture = try Fixture()
+      let recorder = DarwinNotificationRecorder()
+      let mailbox = try fixture.mailbox(notificationName: recorder.name)
+      let id = UUID()
+      try mailbox.enqueue(.init(value: "original"), id: id)
+      #expect(await recorder.receivedNotification(after: 0))
+      let baseline = recorder.count
+
+      try mailbox.enqueue(.init(value: "retry"), id: id)
+
+      try? await Task.sleep(for: .milliseconds(50))
+      #expect(recorder.count == baseline)
+      #expect(try mailbox.claimPending().count == 1)
+    }
+
+    @Test("Idempotent enqueue while claimed does not notify")
+    func idempotentEnqueueWhileClaimedDoesNotNotify() async throws {
+      let fixture = try Fixture()
+      let recorder = DarwinNotificationRecorder()
+      let mailbox = try fixture.mailbox(notificationName: recorder.name)
+      let id = UUID()
+      try mailbox.enqueue(.init(value: "original"), id: id)
+      #expect(await recorder.receivedNotification(after: 0))
+      _ = try #require(try mailbox.claimPending(limit: 1).first)
+      let baseline = recorder.count
+
+      try mailbox.enqueue(.init(value: "retry"), id: id)
+
+      try? await Task.sleep(for: .milliseconds(50))
+      #expect(recorder.count == baseline)
+    }
+
     @Test("Releasing a claim notifies after making it pending")
     func releaseNotification() async throws {
       let fixture = try Fixture()

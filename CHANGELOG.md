@@ -11,6 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Ordinal overflow throws `ordinalExhausted` instead of a generic I/O failure (#41).
 - Idempotent enqueue recognizes malformed and quarantined same-ID files (#21, #22).
+- Capacity counting and pending selection agree on lowercase `.json` pending names (#23, #24, #25).
 
 ## [0.1.1] - 2026-08-03
 

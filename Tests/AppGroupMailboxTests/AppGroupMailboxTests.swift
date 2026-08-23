@@ -445,6 +445,23 @@ struct AppGroupMailboxTests {
     #expect(try mailbox.claimPending().isEmpty)
   }
 
+  @Test("Non-json pending files do not consume capacity")
+  func extensionlessPendingDoesNotConsumeCapacity() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(maxMessages: 1))
+    try Data("ghost".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent("pending-00000000000000000001-ghost")
+    )
+    try Data("ghost".utf8).write(
+      to: fixture.mailboxDirectory.appendingPathComponent(
+        "pending-00000000000000000002-\(UUID().uuidString).JSON"
+      )
+    )
+
+    try mailbox.enqueue(Message(value: "real"))
+    #expect(try mailbox.claimPending().map(\.message.value) == ["real"])
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root", arguments: ["", ".", "..", "../escape", "a/b"])
   func invalidNamespace(namespace: String) throws {

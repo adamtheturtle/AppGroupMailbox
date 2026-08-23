@@ -401,12 +401,27 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
   private func activeMessageCount() throws -> Int {
     try contents().count { url in
-      let name = url.lastPathComponent
-      let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-      return (name.hasPrefix("pending-") || name.hasPrefix("claimed-"))
-        && values?.isRegularFile == true
-        && values?.isSymbolicLink != true
+      Self.isActiveMessageURL(url)
     }
+  }
+
+  /// Pending and claimed regular files that count toward capacity and can participate
+  /// in claim/idempotency flows. Requires a lowercase `.json` pending name so ghost
+  /// capacity slots from alternate extensions cannot accumulate.
+  static func isPendingMessageName(_ name: String) -> Bool {
+    name.hasPrefix("pending-") && name.hasSuffix(".json") && !name.contains("/")
+  }
+
+  static func isActiveMessageName(_ name: String) -> Bool {
+    if name.hasPrefix("claimed-") { return true }
+    return isPendingMessageName(name)
+  }
+
+  static func isActiveMessageURL(_ url: URL) -> Bool {
+    let name = url.lastPathComponent
+    guard isActiveMessageName(name) else { return false }
+    let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+    return values?.isRegularFile == true && values?.isSymbolicLink != true
   }
 
   private func containsMessage(id: UUID) throws -> Bool {

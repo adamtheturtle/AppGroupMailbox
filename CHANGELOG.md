@@ -19,6 +19,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `MailboxError` conforms to `LocalizedError` and `Hashable` (#52, #53).
 - Claim rollback, release conflicts, and transient claim-read failures are handled without split-brain or stuck claims (#38, #39, #40).
 - `activeMessageCount` fails closed when `resourceValues` fails so capacity cannot be bypassed (#49).
+- Expired malformed messages are quarantined with `malformedMessageQuarantined` instead of looking like normal expiry (#26).
 
 ## [0.1.1] - 2026-08-03
 

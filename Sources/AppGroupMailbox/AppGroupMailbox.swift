@@ -425,17 +425,33 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
       let modificationDate = values?.contentModificationDate ?? now
       let claimAge = now.timeIntervalSince(modificationDate)
-      let enqueuedAt = try? decoder.decode(Envelope.self, from: safeData(at: url)).enqueuedAt
+      let decoded: Envelope?
+      do {
+        decoded = try decoder.decode(Envelope.self, from: safeData(at: url))
+      } catch {
+        decoded = nil
+      }
+      let enqueuedAt = decoded?.enqueuedAt
       let messageAge = now.timeIntervalSince(enqueuedAt ?? modificationDate)
       if name.hasPrefix("pending-"), messageAge > limits.messageLifetime {
-        try? fileManager.removeItem(at: url)
-        diagnostic?(.expiredMessageRemoved)
+        if decoded == nil {
+          try quarantine(url)
+          diagnostic?(.malformedMessageQuarantined)
+        } else {
+          try? fileManager.removeItem(at: url)
+          diagnostic?(.expiredMessageRemoved)
+        }
       } else if name.hasPrefix("claimed-"), claimAge > limits.claimTimeout,
         let original = claimedOriginalName
       {
         if messageAge > limits.messageLifetime {
-          try? fileManager.removeItem(at: url)
-          diagnostic?(.expiredMessageRemoved)
+          if decoded == nil {
+            try quarantine(url)
+            diagnostic?(.malformedMessageQuarantined)
+          } else {
+            try? fileManager.removeItem(at: url)
+            diagnostic?(.expiredMessageRemoved)
+          }
           continue
         }
         let destination = directory.appendingPathComponent(original, isDirectory: false)

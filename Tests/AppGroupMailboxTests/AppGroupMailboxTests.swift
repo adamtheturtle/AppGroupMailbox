@@ -556,12 +556,14 @@ struct AppGroupMailboxTests {
     let trigger = MaintenanceTrigger()
     trigger.mailbox = try fixture.mailbox(
       limits: .init(maxMessages: 2),
+      overflowPolicy: .discardOldest,
       diagnostic: { _ in
         try? trigger.mailbox?.performMaintenance()
       }
     )
     try trigger.mailbox?.enqueue(Message(value: "first"))
     try trigger.mailbox?.enqueue(Message(value: "second"))
+    try trigger.mailbox?.enqueue(Message(value: "third"))
   }
 
   @Test("Renewing a claim extends its abandoned-claim timeout")

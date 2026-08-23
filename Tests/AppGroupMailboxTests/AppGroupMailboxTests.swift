@@ -562,6 +562,25 @@ struct AppGroupMailboxTests {
     try trigger.mailbox?.enqueue(Message(value: "second"))
   }
 
+  @Test("Renewing a claim extends its abandoned-claim timeout")
+  func claimRenew() throws {
+    let fixture = try Fixture()
+    let mailbox = try fixture.mailbox(limits: .init(claimTimeout: 1))
+    try mailbox.enqueue(Message(value: "renew me"))
+    let claim = try #require(try mailbox.claimPending(limit: 1).first)
+    let claimedURL = try #require(try fixture.claimedURL())
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: -2)],
+      ofItemAtPath: claimedURL.path
+    )
+
+    try claim.renew()
+
+    try mailbox.performMaintenance()
+    #expect(try mailbox.claimPending().isEmpty)
+    try claim.acknowledge()
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

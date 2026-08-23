@@ -107,7 +107,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     public let message: Message
     public let enqueuedAt: Date
 
-    private let mailbox: AppGroupMailbox
+    private weak var mailbox: AppGroupMailbox?
     private let claimedURL: URL
     private let originalName: String
 
@@ -129,12 +129,20 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 
     /// Permanently removes the claimed message.
     public func acknowledge() throws {
+      guard let mailbox else { throw MailboxError.claimNoLongerExists }
       try mailbox.finishClaim(at: claimedURL, originalName: originalName, acknowledge: true)
     }
 
     /// Returns the message to the pending queue at its original position.
     public func release() throws {
+      guard let mailbox else { throw MailboxError.claimNoLongerExists }
       try mailbox.finishClaim(at: claimedURL, originalName: originalName, acknowledge: false)
+    }
+
+    /// Extends the claim lease so abandoned-claim recovery waits another ``Limits/claimTimeout``.
+    public func renew() throws {
+      guard let mailbox else { throw MailboxError.claimNoLongerExists }
+      try mailbox.renewClaim(at: claimedURL)
     }
   }
 
@@ -401,6 +409,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
   }
 
   // swiftlint:disable:next cyclomatic_complexity
+  fileprivate func renewClaim(at url: URL) throws {
+    try withLock {
+      guard fileManager.fileExists(atPath: url.path) else { throw MailboxError.claimNoLongerExists }
+      try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+    }
+  }
+
   private func maintain(recoveredMessages: inout Bool) throws {
     let now = Date()
     let urls = try contents()

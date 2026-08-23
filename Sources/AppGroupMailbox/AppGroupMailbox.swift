@@ -332,7 +332,13 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       return nil
     } catch {
       if fileManager.fileExists(atPath: claimURL.path) {
-        try? fileManager.moveItem(at: claimURL, to: entry.url)
+        do {
+          try fileManager.moveItem(at: claimURL, to: entry.url)
+        } catch {
+          // Avoid split-brain (pending gone, claim present) when rollback fails.
+          try quarantine(claimURL)
+          diagnostic?(.unsafeFileQuarantined)
+        }
       }
       throw MailboxError.ioFailure
     }
@@ -352,9 +358,18 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       try quarantine(claimURL)
       diagnostic?(.unsafeFileQuarantined)
       return nil
-    } catch {
+    } catch is DecodingError {
       try quarantine(claimURL)
       diagnostic?(.malformedMessageQuarantined)
+      return nil
+    } catch {
+      // Restore pending so transient read failures do not permanently drop messages.
+      do {
+        try fileManager.moveItem(at: claimURL, to: entry.url)
+      } catch {
+        try quarantine(claimURL)
+        diagnostic?(.malformedMessageQuarantined)
+      }
       return nil
     }
   }
@@ -367,8 +382,15 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
           try fileManager.removeItem(at: url)
         } else {
           let destination = directory.appendingPathComponent(originalName, isDirectory: false)
+          if fileManager.fileExists(atPath: destination.path) {
+            // Conflicting pending file blocks release; quarantine it so the claim can return.
+            try quarantine(destination)
+            diagnostic?(.unsafeFileQuarantined)
+          }
           try fileManager.moveItem(at: url, to: destination)
         }
+      } catch let error as MailboxError {
+        throw error
       } catch {
         throw MailboxError.ioFailure
       }

@@ -11,6 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Give multiprocess test workers an isolated namespace per run.
 - Decode only envelope timestamps when ordering pending files for claim.
+- Emit a diagnostic when quarantine retention is disabled and unsafe files are discarded.
 - Abandoned-claim recovery quarantines conflicting pending files and surfaces failed restore moves (#27, #28).
 
 ## [0.1.1] - 2026-08-03

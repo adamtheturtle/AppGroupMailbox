@@ -3,7 +3,7 @@ import Foundation
 extension AppGroupMailbox {
   func pendingEntries() throws -> [Entry] {
     try contents()
-      .filter { $0.lastPathComponent.hasPrefix("pending-") && $0.pathExtension == "json" }
+      .filter { Self.isPendingMessageName($0.lastPathComponent) }
       .compactMap { url in
         let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard values?.isRegularFile == true, values?.isSymbolicLink != true else { return nil }

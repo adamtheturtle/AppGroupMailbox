@@ -56,6 +56,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
     case unsafeFileQuarantined
     case malformedMessageQuarantined
     case oldestMessageDiscarded
+    case unclaimableFilesPresent
   }
 
   /// Failures produced by mailbox operations. No case contains message contents.
@@ -290,6 +291,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       if try activeMessageCount() >= limits.maxMessages {
         switch overflowPolicy {
         case .rejectNewest:
+          if try unclaimableFilesPresent() {
+            diagnostic?(.unclaimableFilesPresent)
+          }
           throw MailboxError.mailboxFull
         case .discardOldest:
           guard !pending.isEmpty else { throw MailboxError.mailboxFull }
@@ -513,6 +517,11 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
     }
     try trimQuarantine()
+  }
+
+  private func unclaimableFilesPresent() throws -> Bool {
+    let claimable = try pendingEntries().count
+    return try activeMessageCount() > claimable
   }
 
   private func activeMessageCount() throws -> Int {

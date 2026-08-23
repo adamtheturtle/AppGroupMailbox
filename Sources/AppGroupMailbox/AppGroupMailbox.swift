@@ -516,8 +516,9 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       ])
       if values?.isDirectory == true {
         // Orphan directories with mailbox prefixes are not messages; remove them.
-        try? fileManager.removeItem(at: url)
-        emitDiagnostic(.unsafeFileQuarantined)
+        if (try? fileManager.removeItem(at: url)) != nil {
+          emitDiagnostic(.unsafeFileQuarantined)
+        }
         continue
       }
       guard values?.isRegularFile == true, values?.isSymbolicLink != true else {

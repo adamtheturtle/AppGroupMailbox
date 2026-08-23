@@ -95,6 +95,8 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
         return "Encoding the message failed."
       case .decodingFailure:
         return "Decoding the message failed."
+      case .ordinalExhausted:
+        return "The mailbox ordinal space is exhausted."
       }
     }
   }

@@ -406,8 +406,14 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       let name = url.lastPathComponent
       guard name.hasPrefix("pending-") || name.hasPrefix("claimed-") else { continue }
       let values = try? url.resourceValues(forKeys: [
-        .contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey,
+        .contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey,
       ])
+      if values?.isDirectory == true {
+        // Orphan directories with mailbox prefixes are not messages; remove them.
+        try? fileManager.removeItem(at: url)
+        diagnostic?(.unsafeFileQuarantined)
+        continue
+      }
       guard values?.isRegularFile == true, values?.isSymbolicLink != true else {
         try quarantine(url)
         diagnostic?(.unsafeFileQuarantined)

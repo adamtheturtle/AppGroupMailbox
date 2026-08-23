@@ -618,6 +618,20 @@ struct AppGroupMailboxTests {
     #expect(names.contains { $0.hasPrefix("quarantine-") })
   }
 
+
+  @Test("Ordinals use 21 digits once millisecond timestamps exceed 20 digits")
+  func wideOrdinals() {
+    let id = UUID()
+    let name = AppGroupMailbox<Message>.pendingFileName(
+      ordinal: 10_000_000_000_000_000_000, id: id)
+    #expect(name.hasPrefix("pending-"))
+    #expect(AppGroupMailbox<Message>.ordinal(from: name) == 10_000_000_000_000_000_000)
+    #expect(
+      AppGroupMailbox<Message>.ordinal(from: "pending-00000000000000000001-\(id.uuidString).json")
+        == 1
+    )
+  }
+
   @Test(
     "Namespaces cannot escape the mailbox root",
     arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])

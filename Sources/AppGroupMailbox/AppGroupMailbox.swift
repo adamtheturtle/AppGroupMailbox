@@ -353,7 +353,7 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
       }
 
       let ordinal = try nextOrdinal(from: pending)
-      let name = String(format: "pending-%020llu-%@.json", ordinal, id.uuidString)
+      let name = Self.pendingFileName(ordinal: ordinal, id: id)
       let destination = directory.appendingPathComponent(name, isDirectory: false)
       do {
         try data.write(to: destination, options: writeOptions)
@@ -751,12 +751,16 @@ extension AppGroupMailbox {
     return nil
   }
 
+  static func pendingFileName(ordinal: UInt64, id: UUID) -> String {
+    String(format: "pending-%021llu-%@.json", ordinal, id.uuidString)
+  }
+
   static func ordinal(from name: String) -> UInt64? {
     guard name.hasPrefix("pending-") else { return nil }
     let remainder = name.dropFirst("pending-".count)
     let digits = remainder.prefix(while: \Character.isNumber)
-    guard digits.count == 20,
-      remainder.dropFirst(20).first == "-",
+    guard (20...21).contains(digits.count),
+      remainder.dropFirst(digits.count).first == "-",
       let value = UInt64(digits)
     else { return nil }
     return value
@@ -785,9 +789,11 @@ extension AppGroupMailbox {
   static func messageID(fromPendingName name: String) -> UUID? {
     guard name.hasPrefix("pending-"), name.hasSuffix(".json") else { return nil }
     let body = name.dropFirst("pending-".count).dropLast(".json".count)
-    guard body.count == 20 + 1 + 36,
-      ordinal(from: name) != nil,
-      body.dropFirst(20).first == "-"
+    guard ordinal(from: name) != nil else { return nil }
+    let digits = body.prefix(while: \Character.isNumber)
+    guard (20...21).contains(digits.count),
+      body.dropFirst(digits.count).first == "-",
+      body.count == digits.count + 1 + 36
     else { return nil }
     return UUID(uuidString: String(body.suffix(36)))
   }

@@ -14,6 +14,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Capacity counting and pending selection agree on lowercase `.json` pending names (#23, #24, #25).
 - Idempotent enqueue does not post a Darwin notification when skipping a duplicate (#70).
 - `claimPending(limit:)` rejects zero as an invalid limit (#32).
+- Namespace validation rejects dot-only names such as `...` (#42).
 
 ## [0.1.1] - 2026-08-03
 

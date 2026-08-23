@@ -480,7 +480,8 @@ struct AppGroupMailboxTests {
   }
 
   @Test(
-    "Namespaces cannot escape the mailbox root", arguments: ["", ".", "..", "../escape", "a/b"])
+    "Namespaces cannot escape the mailbox root",
+    arguments: ["", ".", "..", "...", "....", "../escape", "a/b"])
   func invalidNamespace(namespace: String) throws {
     let fixture = try Fixture()
     #expect(throws: AppGroupMailbox<Message>.MailboxError.invalidNamespace) {

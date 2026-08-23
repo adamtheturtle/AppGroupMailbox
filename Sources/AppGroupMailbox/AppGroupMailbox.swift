@@ -489,10 +489,15 @@ public final class AppGroupMailbox<Message: Codable & Sendable>: @unchecked Send
 extension AppGroupMailbox {
   private static func isValidNamespace(_ namespace: String) -> Bool {
     guard (1...64).contains(namespace.count) else { return false }
-    return namespace.utf8.allSatisfy { byte in
-      (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
-        || byte == 45 || byte == 95 || byte == 46
-    } && namespace != "." && namespace != ".."
+    guard
+      namespace.utf8.allSatisfy({ byte in
+        (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+          || byte == 45 || byte == 95 || byte == 46
+      })
+    else { return false }
+    // Reject ".", "..", and any name made only of dots (e.g. "...") which can be
+    // surprising path components even when they are not classic traversal tokens.
+    return namespace.contains(where: { $0 != "." })
   }
 
   /// Extracts a message UUID embedded in pending-, claimed-, or quarantine- filenames.

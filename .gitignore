@@ -3,3 +3,6 @@
 *.xcodeproj
 xcuserdata/
 DerivedData/
+
+# Vale styles downloaded by `vale sync`.
+styles/

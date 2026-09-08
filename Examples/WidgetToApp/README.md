@@ -14,5 +14,6 @@ let actions = try AppGroupMailbox<WidgetAction>(
 )
 ```
 
-The widget calls `try actions.enqueue(.refresh)`. The host app drains on activation and when its
-Darwin notification observer fires. It acknowledges only after applying the action successfully.
+The widget calls `try actions.enqueue(.refresh)`.
+The host app drains on activation and when its Darwin notification observer fires.
+It acknowledges only after applying the action successfully.

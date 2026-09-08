@@ -4,10 +4,11 @@ Pass caller-owned messages safely between Apple app processes that share an App 
 
 ## Overview
 
-`AppGroupMailbox` is a bounded, file-backed FIFO mailbox. Each enqueue is an atomic write. A
-consumer atomically renames a pending file into a claim, ensuring that concurrent consumers cannot
-both receive it. The consumer then acknowledges the claim or releases it for retry. Claims left by
-a terminated process return to the pending queue after a configurable timeout.
+`AppGroupMailbox` is a bounded, file-backed FIFO mailbox.
+Each enqueue is an atomic write.
+A consumer atomically renames a pending file into a claim, ensuring that concurrent consumers cannot both receive it.
+The consumer then acknowledges the claim or releases it for retry.
+Claims left by a terminated process return to the pending queue after a configurable timeout.
 
 ```swift
 let mailbox = try AppGroupMailbox<MyMessage>(
@@ -23,8 +24,8 @@ for claim in try mailbox.claimPending() {
 }
 ```
 
-The package rejects symbolic links, non-regular files, oversized payloads, malformed envelopes,
-and namespaces that could alter a path. Diagnostics never contain message contents.
+The package rejects symbolic links, non-regular files, oversized payloads, malformed envelopes, and namespaces that could alter a path.
+Diagnostics never contain message contents.
 
 ## Topics
 

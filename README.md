@@ -1,10 +1,8 @@
 # AppGroupMailbox
 
-A reliable, bounded, file-backed mailbox for passing messages between Apple app processes that
-share an App Group container.
+A reliable, bounded, file-backed mailbox for passing messages between Apple app processes that share an App Group container.
 
-[Documentation](https://swiftpackageindex.com/adamtheturtle/AppGroupMailbox/documentation/appgroupmailbox) |
-[Swift Package Index](https://swiftpackageindex.com/adamtheturtle/AppGroupMailbox)
+[Documentation](https://swiftpackageindex.com/adamtheturtle/AppGroupMailbox/documentation/appgroupmailbox) | [Swift Package Index](https://swiftpackageindex.com/adamtheturtle/AppGroupMailbox)
 
 ## Installation
 
@@ -12,8 +10,7 @@ share an App Group container.
 .package(url: "https://github.com/adamtheturtle/AppGroupMailbox.git", from: "0.1.0")
 ```
 
-Add the `AppGroupMailbox` product to the app, widget, intent, extension, or helper targets that
-exchange messages.
+Add the `AppGroupMailbox` product to the app, widget, intent, extension, or helper targets that exchange messages.
 
 ## Usage
 
@@ -35,27 +32,25 @@ let mailbox = try AppGroupMailbox<WidgetAction>(
 )
 ```
 
-The producer writes atomically and can optionally nudge an already-running consumer with a
-payload-free Darwin notification. The same notification is also posted when a claim is released
-back to pending and when an abandoned claim is recovered:
+The producer writes atomically and can optionally nudge an already-running consumer with a payload-free Darwin notification.
+The same notification is also posted when a claim is released back to pending and when an abandoned claim is recovered:
 
 ```swift
 try mailbox.enqueue(.selectItem(id: itemID))
 ```
 
-Darwin notifications are coalesced by the system. A single callback may correspond to many
-enqueues, so consumers should drain `claimPending()` until empty rather than assuming one
-notification maps to one message.
+Darwin notifications are coalesced by the system.
+A single callback may correspond to many enqueues, so consumers should drain `claimPending()` until empty rather than assuming one notification maps to one message.
 
-When importing another durable queue, supply its stable record ID. Retrying the import succeeds
-without writing a duplicate while that ID is pending or claimed:
+When importing another durable queue, supply its stable record ID.
+Retrying the import succeeds without writing a duplicate while that ID is pending or claimed:
 
 ```swift
 try mailbox.enqueue(action, id: legacyRecordID)
 ```
 
-Pass the legacy enqueue date as well to preserve its chronological position relative to messages
-already in the mailbox. Records with equal dates retain their mailbox insertion order:
+Pass the legacy enqueue date as well to preserve its chronological position relative to messages already in the mailbox.
+Records with equal dates retain their mailbox insertion order:
 
 ```swift
 try mailbox.enqueue(action, id: legacyRecordID, enqueuedAt: legacyEnqueuedAt)
@@ -76,17 +71,17 @@ for claim in try mailbox.claimPending() {
 
 ## Delivery and recovery
 
-Pending messages are atomically renamed into unique claims. Two concurrent consumers cannot claim
-the same file. A successful acknowledgement deletes the claim; release restores its original queue
-position. If a process terminates while holding a claim, the next maintenance or claim operation
-restores it after `claimTimeout`.
+Pending messages are atomically renamed into unique claims.
+Two concurrent consumers cannot claim the same file.
+A successful acknowledgement deletes the claim.
+Release restores its original queue position.
+If a process terminates while holding a claim, the next maintenance or claim operation restores it after `claimTimeout`.
 
-This is at-least-once delivery, so handlers should be idempotent. Stable claim IDs let an application
-deduplicate effects when required.
+This is at-least-once delivery, so handlers should be idempotent.
+Stable claim IDs let an application deduplicate effects when required.
 
 Queue depth, encoded payload size, message age, claim timeout, and quarantine size are bounded.
-When full, a mailbox can reject the newest enqueue (the default) or discard its oldest pending
-message.
+When full, a mailbox can reject the newest enqueue (the default) or discard its oldest pending message.
 
 ## Security
 
@@ -97,13 +92,11 @@ message.
 - Quarantine storage is bounded.
 - Diagnostics describe outcomes but never contain message contents.
 
-On iOS, tvOS, watchOS, and visionOS, enqueue and dequeue write queue files with
-`completeFileProtectionUntilFirstUserAuthentication`. Until the device is unlocked once
-after boot, those operations can fail with I/O errors even though the App Group container
-is otherwise available.
+On iOS, tvOS, watchOS, and visionOS, enqueue and dequeue write queue files with `completeFileProtectionUntilFirstUserAuthentication`.
+Until the device is unlocked once after boot, those operations can fail with I/O errors even though the App Group container is otherwise available.
 
-The App Group container is the trust boundary. Every target that uses the mailbox must have the same
-App Group entitlement.
+The App Group container is the trust boundary.
+Every target that uses the mailbox must have the same App Group entitlement.
 
 ## Requirements
 
@@ -113,4 +106,5 @@ App Group entitlement.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT.
+See [LICENSE](LICENSE).

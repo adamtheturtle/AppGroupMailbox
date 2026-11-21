@@ -40,7 +40,8 @@ try mailbox.enqueue(.selectItem(id: itemID))
 ```
 
 Darwin notifications are coalesced by the system.
-A single callback may correspond to many enqueues, so consumers should drain `claimPending()` until empty rather than assuming one notification maps to one message.
+One callback may correspond to many enqueues.
+Call `claimPending()` until the mailbox is empty.
 
 When importing another durable queue, supply its stable record ID.
 Retrying the import succeeds without writing a duplicate while that ID is pending or claimed:
@@ -96,7 +97,7 @@ On iOS, tvOS, watchOS, and visionOS, enqueue and dequeue write queue files with 
 Until the device is unlocked once after boot, those operations can fail with I/O errors even though the App Group container is otherwise available.
 
 The App Group container is the trust boundary.
-Every target that uses the mailbox must have the same App Group entitlement.
+Use the same App Group entitlement in each target that uses the mailbox.
 
 ## Requirements
 

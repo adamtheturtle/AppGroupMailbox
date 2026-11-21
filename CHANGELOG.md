@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Ignore in-flight claims when reporting unclaimable capacity on rejectNewest (#105).
 - Defer unclaimableFilesPresent diagnostics until after the mailbox lock is released (#106).
 - Decode legacy reference-date envelope timestamps after the Unix-second migration (#107).
-- Write test fixture enqueue timestamps as Unix seconds (#108).
+- Write enqueue times in test fixtures as Unix seconds (#108).
 - Ordinal overflow throws `ordinalExhausted` instead of a generic I/O failure (#41).
 - Idempotent enqueue recognizes malformed and quarantined same-ID files (#21, #22).
 - Capacity counting and pending selection agree on lowercase `.json` pending names (#23, #24, #25).
@@ -56,7 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Tag envelopes with schema version and message type to prevent cross-type namespace corruption.
 - Allocate 21-digit pending ordinals so millisecond timestamps remain encodable.
 - Read only envelope timestamps during maintenance instead of decoding full messages.
-- Abandoned-claim recovery quarantines conflicting pending files and surfaces failed restore moves (#27, #28).
+- Abandoned-claim recovery quarantines conflicting pending files and reports failed restore moves (#27, #28).
 - Count hard-linked pending/claimed files once toward maxMessages (#50).
 - Remove orphan pending-/claimed- directories during maintenance (#51).
 - Notify consumers when expired messages are removed during maintenance (#34).

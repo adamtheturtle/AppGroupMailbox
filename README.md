@@ -40,7 +40,8 @@ try mailbox.enqueue(.selectItem(id: itemID))
 ```
 
 Darwin notifications are coalesced by the system.
-One callback may correspond to many enqueues. Call `claimPending()` until the mailbox is empty.
+One callback may correspond to many enqueues.
+Call `claimPending()` until the mailbox is empty.
 
 When importing another durable queue, supply its stable record ID.
 Retrying the import succeeds without writing a duplicate while that ID is pending or claimed:
